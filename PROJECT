@@ -1,0 +1,16 @@
+domain: f5.com
+layout:
+- go.kubebuilder.io/v3
+projectName: bigip-kubernetes-gateway
+repo: f5.com/bigip-k8s-gateway
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: f5.com
+  group: gateways
+  kind: Adc
+  path: f5.com/bigip-k8s-gateway/api/v1
+  version: v1
+version: "3"
