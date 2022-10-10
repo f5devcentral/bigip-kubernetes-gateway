@@ -50,7 +50,13 @@ func (r *AdcReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	_ = log.FromContext(ctx)
 
 	// TODO(user): your logic here
-	ctrl.Log.Info("here is called")
+	ctrl.Log.Info("reconcile is called to do action on " + req.NamespacedName.String())
+	var obj gatewaysv1.Adc
+	err := r.Get(ctx, req.NamespacedName, &obj)
+	if err != nil {
+		ctrl.Log.Info("Failed to get object: " + err.Error())
+	}
+	ctrl.Log.Info("spec contains " + obj.Spec.Foo)
 	return ctrl.Result{}, nil
 }
 

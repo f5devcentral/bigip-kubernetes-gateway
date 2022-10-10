@@ -48,6 +48,9 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 }
 
+// 530  kubebuilder init --domain f5.com --repo f5.com/bigip-k8s-gateway
+// 531  kubebuilder create api --group gateways --version v1 --kind Adc
+
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
