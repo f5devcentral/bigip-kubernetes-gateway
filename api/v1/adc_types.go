@@ -36,6 +36,9 @@ type AdcSpec struct {
 type AdcStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Status records the status of adc
+	Status string `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true

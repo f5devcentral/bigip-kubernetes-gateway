@@ -47,7 +47,9 @@ type AdcReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *AdcReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	zlog := log.FromContext(ctx)
+	zlog.Info("logger is working")
+	zlog.V(1).Info("logger is working", "some other msg parts", "key-value's value")
 
 	// TODO(user): your logic here
 	ctrl.Log.Info("reconcile is called to do action on " + req.NamespacedName.String())
@@ -57,6 +59,12 @@ func (r *AdcReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		ctrl.Log.Info("Failed to get object: " + err.Error())
 	}
 	ctrl.Log.Info("spec contains " + obj.Spec.Foo)
+	// obj.Status.Status = fmt.Sprintf("Updated At %s", time.Now()) // dead loop
+	obj.Status.Status = "Updated"
+	if err := r.Status().Update(ctx, &obj); err != nil {
+		zlog.Error(err, "failed to update status")
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 

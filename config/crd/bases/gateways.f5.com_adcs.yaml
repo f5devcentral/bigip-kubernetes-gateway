@@ -42,6 +42,10 @@ spec:
             type: object
           status:
             description: AdcStatus defines the observed state of Adc
+            properties:
+              status:
+                description: Status records the status of adc
+                type: string
             type: object
         type: object
     served: true
