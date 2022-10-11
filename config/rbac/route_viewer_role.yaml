@@ -1,0 +1,27 @@
+# permissions for end users to view routes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: route-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: bigip-kubernetes-gateway
+    app.kubernetes.io/part-of: bigip-kubernetes-gateway
+    app.kubernetes.io/managed-by: kustomize
+  name: route-viewer-role
+rules:
+- apiGroups:
+  - gateways.f5.com
+  resources:
+  - routes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - gateways.f5.com
+  resources:
+  - routes/status
+  verbs:
+  - get

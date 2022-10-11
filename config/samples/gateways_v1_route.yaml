@@ -1,0 +1,12 @@
+apiVersion: gateways.f5.com/v1
+kind: Route
+metadata:
+  labels:
+    app.kubernetes.io/name: route
+    app.kubernetes.io/instance: route-sample
+    app.kubernetes.io/part-of: bigip-kubernetes-gateway
+    app.kuberentes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: bigip-kubernetes-gateway
+  name: route-sample
+spec:
+  # TODO(user): Add fields here
