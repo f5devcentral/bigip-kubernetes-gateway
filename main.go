@@ -33,7 +33,10 @@ import (
 
 	gatewaysv1 "f5.com/bigip-k8s-gateway/api/v1"
 	"f5.com/bigip-k8s-gateway/controllers"
+
 	//+kubebuilder:scaffold:imports
+
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 var (
@@ -46,6 +49,8 @@ func init() {
 
 	utilruntime.Must(gatewaysv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
+
+	utilruntime.Must(gatewayv1beta1.AddToScheme(scheme))
 }
 
 // 530  kubebuilder init --domain f5.com --repo f5.com/bigip-k8s-gateway
@@ -107,6 +112,14 @@ func main() {
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
+
+	if err = (&controllers.GatewayReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Route")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")

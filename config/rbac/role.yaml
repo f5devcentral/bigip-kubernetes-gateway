@@ -34,6 +34,32 @@ rules:
 - apiGroups:
   - gateways.f5.com
   resources:
+  - gateways
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateways.f5.com
+  resources:
+  - gateways/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - gateways.f5.com
+  resources:
+  - gateways/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - gateways.f5.com
+  resources:
   - routes
   verbs:
   - create
