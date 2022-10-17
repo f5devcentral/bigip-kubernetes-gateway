@@ -97,22 +97,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.AdcReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Adc")
-		os.Exit(1)
-	}
-	if err = (&controllers.RouteReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Route")
-		os.Exit(1)
-	}
-	//+kubebuilder:scaffold:builder
-
 	if err = (&controllers.GatewayReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

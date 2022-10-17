@@ -27,15 +27,10 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-// AdcReconciler reconciles a Adc object
 type GatewayReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
-
-//+kubebuilder:rbac:groups=gateways.f5.com,resources=gateways,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=gateways.f5.com,resources=gateways/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=gateways.f5.com,resources=gateways/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -52,6 +47,12 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	zlog.V(1).Info("logger is working", "some other msg parts", "key-value's value")
 
 	// TODO(user): your logic here
+	var obj gatewayv1beta1.Gateway
+	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+		return ctrl.Result{}, err
+	}
+	zlog.V(1).Info("obj " + obj.GetNamespace() + "/" + obj.GetName())
+	ctrl.Log.Info("obj: " + string(obj.Spec.GatewayClassName))
 	return ctrl.Result{}, nil
 }
 
