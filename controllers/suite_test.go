@@ -30,7 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	gatewaysv1 "f5.com/bigip-k8s-gateway/api/v1"
+	gatewaysv1 "gitee.com/zongzw/bigip-kubernetes-gateway/api/v1"
 	//+kubebuilder:scaffold:imports
 )
 

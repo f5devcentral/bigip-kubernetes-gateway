@@ -25,6 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+
+	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 )
 
 type GatewayReconciler struct {
@@ -53,6 +55,11 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	zlog.V(1).Info("obj " + obj.GetNamespace() + "/" + obj.GetName())
 	ctrl.Log.Info("obj: " + string(obj.Spec.GatewayClassName))
+
+	cmds := pkg.ParseGateway(obj.DeepCopy())
+
+	pkg.PendingDeploy <- &cmds
+
 	return ctrl.Result{}, nil
 }
 

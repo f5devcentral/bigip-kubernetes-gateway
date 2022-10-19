@@ -31,8 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	gatewaysv1 "f5.com/bigip-k8s-gateway/api/v1"
-	"f5.com/bigip-k8s-gateway/controllers"
+	gatewaysv1 "gitee.com/zongzw/bigip-kubernetes-gateway/api/v1"
+	"gitee.com/zongzw/bigip-kubernetes-gateway/controllers"
+	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 
 	//+kubebuilder:scaffold:imports
 
@@ -96,6 +97,9 @@ func main() {
 		setupLog.Error(err, "unable to start manager: %s", err.Error())
 		os.Exit(1)
 	}
+
+	stopCh := make(chan struct{})
+	go pkg.Converter(stopCh)
 
 	if err = (&controllers.GatewayReconciler{
 		Client: mgr.GetClient(),
