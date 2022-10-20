@@ -22,6 +22,9 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +37,8 @@ import (
 	gatewaysv1 "gitee.com/zongzw/bigip-kubernetes-gateway/api/v1"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/controllers"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
+	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
+	"gitee.com/zongzw/f5-bigip-rest/utils"
 
 	//+kubebuilder:scaffold:imports
 
@@ -61,16 +66,28 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var bigipUrl string
+	var bigipUsername string
+	var bigipPassword string
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+
+	flag.StringVar(&bigipUrl, "bigip-url", "", "The BIG-IP management IP address for provision resources.")
+	flag.StringVar(&bigipUsername, "bigip-username", "admin", "The BIG-IP username for connection.")
+	flag.StringVar(&bigipPassword, "bigip-password", "", "The BI-IP password for connection.")
+
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	bigip := f5_bigip.Initialize(bigipUrl, bigipUsername, bigipPassword, "debug")
+	utils.Initialize("debug")
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -98,8 +115,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	prometheus.MustRegister(utils.FunctionDurationTimeCost)
+	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostCount)
+	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostTotal)
+
+	mgr.AddMetricsExtraHandler("/stats", promhttp.Handler())
+
 	stopCh := make(chan struct{})
-	go pkg.Converter(stopCh)
+	go pkg.Deployer(stopCh, bigip)
 
 	if err = (&controllers.GatewayReconciler{
 		Client: mgr.GetClient(),

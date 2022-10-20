@@ -9,7 +9,12 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/main.go"
+            "program": "${workspaceFolder}",
+            "args": [
+                "--bigip-url",          "https://10.250.18.105:8443",
+                "--bigip-username",     "admin",
+                "--bigip-password",     "P@ssw0rd123"
+            ]
         }
     ]
 }

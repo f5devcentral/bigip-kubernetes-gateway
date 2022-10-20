@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 
+	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,6 +54,9 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	zlog.V(1).Info("obj " + obj.GetNamespace() + "/" + obj.GetName())
 	// ctrl.Log.Info("obj: " + string(obj.Spec.Hostnames[0]))
+	cmds := pkg.ParseHTTPRoute(obj.DeepCopy())
+	pkg.PendingDeploy <- &cmds
+
 	return ctrl.Result{}, nil
 }
 
