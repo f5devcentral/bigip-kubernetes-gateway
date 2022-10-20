@@ -54,8 +54,11 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	zlog.V(1).Info("obj " + obj.GetNamespace() + "/" + obj.GetName())
 	// ctrl.Log.Info("obj: " + string(obj.Spec.Hostnames[0]))
-	cmds := pkg.ParseHTTPRoute(obj.DeepCopy())
-	pkg.PendingDeploy <- &cmds
+	if cfgs, err := pkg.ParseHTTPRoute(obj.DeepCopy()); err != nil {
+		return ctrl.Result{}, err
+	} else {
+		pkg.PendingDeploy <- &cfgs
+	}
 
 	return ctrl.Result{}, nil
 }

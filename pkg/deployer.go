@@ -6,16 +6,22 @@ import (
 )
 
 func init() {
-	PendingDeploy = make(chan *[]f5_bigip.RestRequest, 16)
+	PendingDeploy = make(chan *map[string]interface{}, 16)
 	slog = utils.SetupLog("", "debug")
 }
 
-func deploy(bigip *f5_bigip.BIGIP, cmds *[]f5_bigip.RestRequest) {
+func deploy(bigip *f5_bigip.BIGIP, cfgs *map[string]interface{}) error {
 	defer utils.TimeItToPrometheus()()
-	slog.Debugf("deploying %d resources to bigip: %s", len(*cmds), bigip.URL)
-	for _, cmd := range *cmds {
-		slog.Infof("cmd url: %s %v:", cmd.ResUri, cmd)
+
+	slog.Debugf("deploying %d resources to bigip: %s", len(*cfgs), bigip.URL)
+	for fn, res := range *cfgs {
+		slog.Infof("cfg: %s %v:", fn, res)
 	}
+	cmds, err := bigip.GenRestRequests("cis-c-tenant", nil, cfgs)
+	if err != nil {
+		return err
+	}
+	return bigip.DoRestRequests(cmds)
 }
 
 func Deployer(stopCh chan struct{}, bigip *f5_bigip.BIGIP) {
@@ -23,8 +29,11 @@ func Deployer(stopCh chan struct{}, bigip *f5_bigip.BIGIP) {
 		select {
 		case <-stopCh:
 			return
-		case cmds := <-PendingDeploy:
-			deploy(bigip, cmds)
+		case cfgs := <-PendingDeploy:
+			err := deploy(bigip, cfgs)
+			if err != nil {
+				// report the error to status or ...
+			}
 		}
 	}
 }

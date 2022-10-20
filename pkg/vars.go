@@ -1,11 +1,10 @@
 package pkg
 
 import (
-	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 )
 
 var (
-	PendingDeploy chan *[]f5_bigip.RestRequest
+	PendingDeploy chan *map[string]interface{}
 	slog          utils.SLOG
 )

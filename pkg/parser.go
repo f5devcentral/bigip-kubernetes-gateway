@@ -1,17 +1,51 @@
 package pkg
 
 import (
-	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
+	"fmt"
+	"strings"
+
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) []f5_bigip.RestRequest {
+func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
-	return []f5_bigip.RestRequest{}
+	return nil, nil
 }
 
-func ParseGateway(gw *gatewayv1beta1.Gateway) []f5_bigip.RestRequest {
+func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
-	return []f5_bigip.RestRequest{}
+
+	ress := map[string]interface{}{}
+	for _, addr := range gw.Spec.Addresses {
+		if *addr.Type == gatewayv1beta1.IPAddressType {
+			ipaddr := addr.Value
+			for _, listener := range gw.Spec.Listeners {
+				destination := fmt.Sprintf("%s:%d", ipaddr, listener.Port)
+				if utils.IsIpv6(ipaddr) {
+					destination = fmt.Sprintf("%s.%d", ipaddr, listener.Port)
+				}
+				name := strings.Join([]string{gw.Namespace, gw.Name, string(listener.Name)}, ".")
+				profiles := map[string]interface{}{
+					"items": []map[string]string{
+						{"name": "http"},
+					},
+				}
+				ipProtocol := "tcp"
+				ress["ltm/virtual/"+name] = map[string]interface{}{
+					"name":              name,
+					"profilesReference": profiles,
+					"ipProtocol":        ipProtocol,
+					"destination":       destination,
+				}
+			}
+		} else {
+			return nil, fmt.Errorf("unsupported AddressType: %s", *addr.Type)
+		}
+	}
+
+	cfgs := map[string]interface{}{
+		"cis-c-tenant": ress,
+	}
+	return cfgs, nil
 }

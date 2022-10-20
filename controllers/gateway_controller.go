@@ -56,9 +56,12 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	zlog.V(1).Info("obj " + obj.GetNamespace() + "/" + obj.GetName())
 	ctrl.Log.Info("obj: " + string(obj.Spec.GatewayClassName))
 
-	cmds := pkg.ParseGateway(obj.DeepCopy())
+	if cfgs, err := pkg.ParseGateway(obj.DeepCopy()); err != nil {
+		return ctrl.Result{}, err
+	} else {
 
-	pkg.PendingDeploy <- &cmds
+		pkg.PendingDeploy <- &cfgs
+	}
 
 	return ctrl.Result{}, nil
 }
