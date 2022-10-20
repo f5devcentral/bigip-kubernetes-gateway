@@ -10,3 +10,5 @@ spec:
   - name: http
     port: 80
     protocol: HTTP
+  addresses:
+    - value: 1.1.1.1

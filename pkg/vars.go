@@ -5,6 +5,8 @@ import (
 )
 
 var (
-	PendingDeploy chan *map[string]interface{}
-	slog          utils.SLOG
+	PendingDeploys chan DeployRequest
+	slog           utils.SLOG
+	ActiveSIGs     *SIGCache
+	StaleSIGs      *SIGCache
 )

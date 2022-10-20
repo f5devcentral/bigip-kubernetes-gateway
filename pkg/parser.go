@@ -15,6 +15,9 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 
 func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
+	if gw == nil {
+		return map[string]interface{}{}, nil
+	}
 
 	ress := map[string]interface{}{}
 	for _, addr := range gw.Spec.Addresses {
@@ -40,12 +43,12 @@ func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 				}
 			}
 		} else {
-			return nil, fmt.Errorf("unsupported AddressType: %s", *addr.Type)
+			return map[string]interface{}{}, fmt.Errorf("unsupported AddressType: %s", *addr.Type)
 		}
 	}
 
 	cfgs := map[string]interface{}{
-		"cis-c-tenant": ress,
+		"": ress,
 	}
 	return cfgs, nil
 }

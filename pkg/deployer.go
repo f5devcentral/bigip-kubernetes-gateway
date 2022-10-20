@@ -5,19 +5,14 @@ import (
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 )
 
-func init() {
-	PendingDeploy = make(chan *map[string]interface{}, 16)
-	slog = utils.SetupLog("", "debug")
-}
-
-func deploy(bigip *f5_bigip.BIGIP, cfgs *map[string]interface{}) error {
+func deploy(bigip *f5_bigip.BIGIP, ocfgs, ncfgs *map[string]interface{}) error {
 	defer utils.TimeItToPrometheus()()
 
-	slog.Debugf("deploying %d resources to bigip: %s", len(*cfgs), bigip.URL)
-	for fn, res := range *cfgs {
-		slog.Infof("cfg: %s %v:", fn, res)
-	}
-	cmds, err := bigip.GenRestRequests("cis-c-tenant", nil, cfgs)
+	// slog.Debugf("deploying %d resources to bigip: %s", len(*ncfgs), bigip.URL)
+	// for fn, res := range *cfgs {
+	// 	slog.Infof("cfg: %s %v:", fn, res)
+	// }
+	cmds, err := bigip.GenRestRequests("cis-c-tenant", ocfgs, ncfgs)
 	if err != nil {
 		return err
 	}
@@ -29,10 +24,13 @@ func Deployer(stopCh chan struct{}, bigip *f5_bigip.BIGIP) {
 		select {
 		case <-stopCh:
 			return
-		case cfgs := <-PendingDeploy:
-			err := deploy(bigip, cfgs)
+		case r := <-PendingDeploys:
+			err := deploy(bigip, r.From, r.To)
 			if err != nil {
 				// report the error to status or ...
+				slog.Errorf("failed to do deployment: %s", err.Error())
+			} else {
+
 			}
 		}
 	}

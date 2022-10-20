@@ -44,23 +44,46 @@ type GatewayReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
-	zlog.Info("logger is working")
-	zlog.V(1).Info("logger is working", "some other msg parts", "key-value's value")
+	_ = log.FromContext(ctx)
 
-	// TODO(user): your logic here
 	var obj gatewayv1beta1.Gateway
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
-		return ctrl.Result{}, err
-	}
-	zlog.V(1).Info("obj " + obj.GetNamespace() + "/" + obj.GetName())
-	ctrl.Log.Info("obj: " + string(obj.Spec.GatewayClassName))
+		if client.IgnoreNotFound(err) == nil {
+			// delete resources
+			pobj := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
+			if ocfgs, err := pkg.ParseGateway(pobj); err != nil {
+				return ctrl.Result{}, err
+			} else {
+				pkg.PendingDeploys <- pkg.DeployRequest{
+					From: &ocfgs,
+					To:   nil,
+				}
+				pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
+				pkg.StaleSIGs.SetGateway(pobj)
+			}
 
-	if cfgs, err := pkg.ParseGateway(obj.DeepCopy()); err != nil {
-		return ctrl.Result{}, err
+			return ctrl.Result{}, nil
+		} else {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
 	} else {
+		cpObj := obj.DeepCopy()
+		if ncfgs, err := pkg.ParseGateway(cpObj); err != nil {
+			return ctrl.Result{}, err
+		} else {
+			oObj := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
+			if ocfgs, err := pkg.ParseGateway(oObj); err != nil {
+				return ctrl.Result{}, err
+			} else {
+				pkg.PendingDeploys <- pkg.DeployRequest{
+					From: &ocfgs,
+					To:   &ncfgs,
+				}
+				pkg.ActiveSIGs.SetGateway(cpObj)
+				pkg.StaleSIGs.SetGateway(oObj)
+			}
 
-		pkg.PendingDeploy <- &cfgs
+		}
 	}
 
 	return ctrl.Result{}, nil
