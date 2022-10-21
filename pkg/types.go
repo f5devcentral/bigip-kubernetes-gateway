@@ -7,8 +7,9 @@ import (
 )
 
 type DeployRequest struct {
-	From *map[string]interface{}
-	To   *map[string]interface{}
+	From       *map[string]interface{}
+	To         *map[string]interface{}
+	StatusFunc func()
 }
 
 type SIGCache struct {

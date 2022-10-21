@@ -8,5 +8,4 @@ var (
 	PendingDeploys chan DeployRequest
 	slog           utils.SLOG
 	ActiveSIGs     *SIGCache
-	StaleSIGs      *SIGCache
 )

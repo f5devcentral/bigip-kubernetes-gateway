@@ -15,11 +15,6 @@ func init() {
 		Gateway:   map[string]*gatewayv1beta1.Gateway{},
 		HTTPRoute: map[string]*gatewayv1beta1.HTTPRoute{},
 	}
-	StaleSIGs = &SIGCache{
-		mutex:     sync.RWMutex{},
-		Gateway:   map[string]*gatewayv1beta1.Gateway{},
-		HTTPRoute: map[string]*gatewayv1beta1.HTTPRoute{},
-	}
 }
 
 func (c *SIGCache) SetGateway(obj *gatewayv1beta1.Gateway) {

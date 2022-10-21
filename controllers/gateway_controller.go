@@ -57,16 +57,18 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				pkg.PendingDeploys <- pkg.DeployRequest{
 					From: &ocfgs,
 					To:   nil,
+					StatusFunc: func() {
+						pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
+					},
 				}
-				pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
-				pkg.StaleSIGs.SetGateway(pobj)
 			}
 
 			return ctrl.Result{}, nil
 		} else {
-			return ctrl.Result{}, client.IgnoreNotFound(err)
+			return ctrl.Result{}, err
 		}
 	} else {
+		// upsert resources
 		cpObj := obj.DeepCopy()
 		if ncfgs, err := pkg.ParseGateway(cpObj); err != nil {
 			return ctrl.Result{}, err
@@ -78,11 +80,15 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				pkg.PendingDeploys <- pkg.DeployRequest{
 					From: &ocfgs,
 					To:   &ncfgs,
+					StatusFunc: func() {
+						obj.Status.Addresses = obj.Spec.Addresses
+						if err := r.Status().Update(ctx, &obj); err != nil {
+							ctrl.Log.V(1).Error(err, "update error")
+						}
+						pkg.ActiveSIGs.SetGateway(cpObj)
+					},
 				}
-				pkg.ActiveSIGs.SetGateway(cpObj)
-				pkg.StaleSIGs.SetGateway(oObj)
 			}
-
 		}
 	}
 
