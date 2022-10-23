@@ -12,6 +12,11 @@ type DeployRequest struct {
 	StatusFunc func()
 }
 
+type ParseRequest struct {
+	Gateway   *gatewayv1beta1.Gateway
+	HTTPRoute *gatewayv1beta1.HTTPRoute
+}
+
 type SIGCache struct {
 	mutex     sync.RWMutex
 	Gateway   map[string]*gatewayv1beta1.Gateway

@@ -50,16 +50,22 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
-			pobj := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
-			if ocfgs, err := pkg.ParseGateway(pobj); err != nil {
+			gw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
+			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}); err != nil {
 				return ctrl.Result{}, err
 			} else {
-				pkg.PendingDeploys <- pkg.DeployRequest{
-					From: &ocfgs,
-					To:   nil,
-					StatusFunc: func() {
-						pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
-					},
+				hrs := pkg.ActiveSIGs.AttachedHTTPRoutes(gw)
+				pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
+				if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs); err != nil {
+					return ctrl.Result{}, err
+				} else {
+					pkg.PendingDeploys <- pkg.DeployRequest{
+						From: &ocfgs,
+						To:   &ncfgs,
+						StatusFunc: func() {
+							// do something
+						},
+					}
 				}
 			}
 
@@ -69,30 +75,26 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	} else {
 		// upsert resources
-		cpObj := obj.DeepCopy()
-		if ncfgs, err := pkg.ParseGateway(cpObj); err != nil {
+		ogw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
+		if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ogw}, nil); err != nil {
 			return ctrl.Result{}, err
 		} else {
-			oObj := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
-			if ocfgs, err := pkg.ParseGateway(oObj); err != nil {
+			ngw := obj.DeepCopy()
+			pkg.ActiveSIGs.SetGateway(ngw)
+			if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ngw}, []*gatewayv1beta1.HTTPRoute{}); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				pkg.PendingDeploys <- pkg.DeployRequest{
 					From: &ocfgs,
 					To:   &ncfgs,
 					StatusFunc: func() {
-						obj.Status.Addresses = obj.Spec.Addresses
-						if err := r.Status().Update(ctx, &obj); err != nil {
-							ctrl.Log.V(1).Error(err, "update error")
-						}
-						pkg.ActiveSIGs.SetGateway(cpObj)
+						// do something
 					},
 				}
+				return ctrl.Result{}, nil
 			}
 		}
 	}
-
-	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

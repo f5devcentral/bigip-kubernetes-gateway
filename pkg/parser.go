@@ -10,36 +10,162 @@ import (
 
 func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
-	return nil, nil
+
+	if hr == nil {
+		return map[string]interface{}{}, nil
+	}
+
+	rlt := map[string]interface{}{}
+
+	// pools from backendRefs
+	for _, rl := range hr.Spec.Rules {
+		for _, br := range rl.BackendRefs {
+			ns := hr.Namespace
+			if br.Namespace != nil {
+				ns = string(*br.Namespace)
+			}
+			name := strings.Join([]string{ns, string(br.Name)}, ".")
+			rlt["ltm/pool/"+name] = map[string]interface{}{
+				"name":             name,
+				"minActiveMembers": 0,
+				// TODO: there's at least one field for PATCH. or we may need to fix that
+				// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
+			}
+		}
+	}
+
+	// irules
+	name := strings.Join([]string{hr.Namespace, hr.Name}, ".")
+	hostnameConditions := []string{}
+	for _, hn := range hr.Spec.Hostnames {
+		hostnameConditions = append(hostnameConditions, fmt.Sprintf(`[HTTP::host] matches "%s"`, hn))
+	}
+	hostnameCondition := strings.Join(hostnameConditions, " or ")
+	if hostnameCondition == "" {
+		hostnameCondition = "1 eq 1"
+	}
+
+	rules := []string{}
+	for _, rl := range hr.Spec.Rules {
+		matchConditions := []string{}
+		for _, match := range rl.Matches {
+			if match.Path != nil {
+				switch *match.Path.Type {
+				case gatewayv1beta1.PathMatchPathPrefix:
+					matchConditions = append(matchConditions, fmt.Sprintf(`[HTTP::path] starts_with "%s"`, *match.Path.Value))
+				case gatewayv1beta1.PathMatchExact:
+					matchConditions = append(matchConditions, fmt.Sprintf(`[HTTP::path] eq "%s"`, *match.Path.Value))
+				case gatewayv1beta1.PathMatchRegularExpression:
+					matchConditions = append(matchConditions, fmt.Sprintf(`[HTTP::path matches "%s"`, *match.Path.Value))
+				}
+			}
+			if match.Headers != nil {
+				return map[string]interface{}{}, fmt.Errorf("match type Headers not supported yet")
+			}
+			if match.Method != nil {
+				return map[string]interface{}{}, fmt.Errorf("match type Method not supported yet")
+			}
+			if match.QueryParams != nil {
+				return map[string]interface{}{}, fmt.Errorf("match type QueryParams not supported yet")
+			}
+		}
+		matchCondition := strings.Join(matchConditions, " or ")
+		if matchCondition == "" {
+			matchCondition = "1 eq 1"
+		}
+		// TODO: only the last backendRef is used.
+		var pool string
+		for _, br := range rl.BackendRefs {
+			ns := hr.Namespace
+			if br.Namespace != nil {
+				ns = string(*br.Namespace)
+			}
+			pool = strings.Join([]string{ns, string(br.Name)}, ".")
+
+		}
+		rules = append(rules, fmt.Sprintf(`	
+			if { %s } {
+				pool %s
+			}
+			`, matchCondition, pool))
+	}
+
+	ruleObj := map[string]interface{}{
+		"name": name,
+		"apiAnonymous": fmt.Sprintf(`when HTTP_REQUEST {
+			if { %s } {
+				%s
+			}
+		}`, hostnameCondition, strings.Join(rules, "")),
+	}
+
+	rlt["ltm/rule/"+name] = ruleObj
+
+	return rlt, nil
 }
 
 func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
+
 	if gw == nil {
 		return map[string]interface{}{}, nil
 	}
 
-	ress := map[string]interface{}{}
+	rlt := map[string]interface{}{}
+
+	hrs := ActiveSIGs.AttachedHTTPRoutes(gw)
+	irules := map[string][]string{}
+	for _, hr := range hrs {
+		for _, pr := range hr.Spec.ParentRefs {
+			ns := hr.Namespace
+			if pr.Namespace != nil {
+				ns = string(*pr.Namespace)
+			}
+			if pr.SectionName == nil {
+				return map[string]interface{}{}, fmt.Errorf("sectionName of paraentRefs is nil, not supported yet")
+			}
+			listener := strings.Join([]string{ns, string(pr.Name), string(*pr.SectionName)}, ".")
+			if _, ok := irules[listener]; !ok {
+				irules[listener] = []string{}
+			}
+			irules[listener] = append(irules[listener], strings.Join([]string{hr.Namespace, hr.Name}, "."))
+		}
+	}
 	for _, addr := range gw.Spec.Addresses {
 		if *addr.Type == gatewayv1beta1.IPAddressType {
 			ipaddr := addr.Value
 			for _, listener := range gw.Spec.Listeners {
+				var profiles []interface{}
+				ipProtocol := ""
+				switch listener.Protocol {
+				case gatewayv1beta1.HTTPProtocolType:
+					profiles = []interface{}{map[string]string{"name": "http"}}
+					ipProtocol = "tcp"
+				case gatewayv1beta1.TCPProtocolType:
+					return map[string]interface{}{}, fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
+				case gatewayv1beta1.UDPProtocolType:
+					return map[string]interface{}{}, fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
+				case gatewayv1beta1.TLSProtocolType:
+					return map[string]interface{}{}, fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
+				}
+				if ipProtocol == "" {
+					return map[string]interface{}{}, fmt.Errorf("ipProtocol not set in %s case", listener.Protocol)
+				}
 				destination := fmt.Sprintf("%s:%d", ipaddr, listener.Port)
 				if utils.IsIpv6(ipaddr) {
 					destination = fmt.Sprintf("%s.%d", ipaddr, listener.Port)
 				}
 				name := strings.Join([]string{gw.Namespace, gw.Name, string(listener.Name)}, ".")
-				profiles := map[string]interface{}{
-					"items": []map[string]string{
-						{"name": "http"},
-					},
+
+				rlt["ltm/virtual/"+name] = map[string]interface{}{
+					"name":        name,
+					"profiles":    profiles,
+					"ipProtocol":  ipProtocol,
+					"destination": destination,
+					"rules":       []interface{}{},
 				}
-				ipProtocol := "tcp"
-				ress["ltm/virtual/"+name] = map[string]interface{}{
-					"name":              name,
-					"profilesReference": profiles,
-					"ipProtocol":        ipProtocol,
-					"destination":       destination,
+				if _, ok := irules[name]; ok {
+					rlt["ltm/virtual/"+name].(map[string]interface{})["rules"] = irules[name]
 				}
 			}
 		} else {
@@ -47,8 +173,36 @@ func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 		}
 	}
 
-	cfgs := map[string]interface{}{
-		"": ress,
+	return rlt, nil
+}
+
+func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
+	defer utils.TimeItToPrometheus()()
+
+	gwmap, hrmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}
+	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, &gwmap, &hrmap)
+
+	rlt := map[string]interface{}{}
+	for _, gw := range gwmap {
+		if cfgs, err := ParseGateway(gw); err != nil {
+			return map[string]interface{}{}, err
+		} else {
+			for k, v := range cfgs {
+				rlt[k] = v
+			}
+		}
 	}
-	return cfgs, nil
+	for _, hr := range hrmap {
+		if cfgs, err := ParseHTTPRoute(hr); err != nil {
+			return map[string]interface{}{}, err
+		} else {
+			for k, v := range cfgs {
+				rlt[k] = v
+			}
+		}
+	}
+
+	return map[string]interface{}{
+		"": rlt,
+	}, nil
 }

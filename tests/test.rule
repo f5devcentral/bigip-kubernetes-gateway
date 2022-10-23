@@ -1,0 +1,16 @@
+when HTTP_REQUEST {
+  log local0. "Domain: [HTTP::host]"
+  log local0. "URI: [HTTP::uri]"
+  log local0. "path: [HTTP::path]"
+  
+  if { [HTTP::host] matches "*.test.com" } {
+    if { [HTTP::path] starts_with "/foxfox" }  {
+		pool foxfox
+	} else {
+	    pool files
+	}
+  } else {
+  log local0. "redirect to example.com"
+    HTTP::redirect http://www.example.com
+  }
+}

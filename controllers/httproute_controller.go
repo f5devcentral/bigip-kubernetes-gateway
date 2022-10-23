@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 
+	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,27 +43,58 @@ type HttpRouteReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
-	zlog.Info("logger is working")
-	zlog.V(1).Info("logger is working", "some other msg parts", "key-value's value")
+	_ = log.FromContext(ctx)
 
-	// TODO(user): your logic here
 	var obj gatewayv1beta1.HTTPRoute
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
-		return ctrl.Result{}, err
-	}
-	zlog.V(1).Info("obj " + obj.GetNamespace() + "/" + obj.GetName())
-	// ctrl.Log.Info("obj: " + string(obj.Spec.Hostnames[0]))
-	// if cfgs, err := pkg.ParseHTTPRoute(obj.DeepCopy()); err != nil {
-	// 	return ctrl.Result{}, err
-	// } else {
-	// 	pkg.PendingDeploys <- pkg.DeployRequest{
-	// 		Operation: "deploy",
-	// 		Resources: &cfgs,
-	// 	}
-	// }
+		if client.IgnoreNotFound(err) == nil {
+			// delete resources
+			hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
+			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}); err != nil {
+				return ctrl.Result{}, err
+			} else {
+				gws := pkg.ActiveSIGs.ParentRefsOf(hr)
+				pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
+				if ncfgs, err := pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}); err != nil {
+					return ctrl.Result{}, err
+				} else {
+					pkg.PendingDeploys <- pkg.DeployRequest{
+						From: &ocfgs,
+						To:   &ncfgs,
+						StatusFunc: func() {
 
-	return ctrl.Result{}, nil
+						},
+					}
+				}
+
+			}
+			return ctrl.Result{}, nil
+		} else {
+			return ctrl.Result{}, err
+		}
+	} else {
+		// upsert resources
+		hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
+		if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}); err != nil {
+			return ctrl.Result{}, err
+		} else {
+			nhr := obj.DeepCopy()
+			pkg.ActiveSIGs.SetHTTPRoute(nhr)
+			if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{nhr}); err != nil {
+				return ctrl.Result{}, err
+			} else {
+				pkg.PendingDeploys <- pkg.DeployRequest{
+					From: &ocfgs,
+					To:   &ncfgs,
+					StatusFunc: func() {
+
+					},
+				}
+			}
+
+		}
+		return ctrl.Result{}, nil
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

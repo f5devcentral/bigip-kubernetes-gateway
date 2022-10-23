@@ -1,0 +1,65 @@
+###
+
+POST https://10.250.15.180/mgmt/tm/ltm/rule/
+Authorization: Basic admin:P@ssw0rd123
+
+{
+    "kind": "tm:ltm:rule:rulestate",
+    "name": "test",
+    "apiAnonymous": "when CLIENT_ACCEPTED {\n  if { [IP::addr [IP::client_addr] equals 10.10.10.10] } {\n    pool mysnat-pool\n  }\n}"
+}
+
+###
+
+# curl --resolve fox.test.com:80:10.250.16.127 http://fox.test.com:80/foxfox
+
+PATCH https://10.250.15.180/mgmt/tm/ltm/rule/~Common~test
+Authorization: Basic admin:P@ssw0rd123
+
+{
+    "kind": "tm:ltm:rule:rulestate",
+    "name": "test",
+    "apiAnonymous": "when CLIENT_ACCEPTED {\n  if { [IP::addr [IP::client_addr] equals 10.10.10.10] } {\n    pool mysnat-pool\n  }\n}"
+}
+
+
+#### POST /tm/ltm/pool
+POST https://10.250.18.105:8443/mgmt/tm/ltm/pool
+Content-Type: application/json
+Authorization: Basic YWRtaW46UEBzc3cwcmQxMjM=
+
+{"name":"default.tea","partition":"cis-c-tenant","subPath":""}
+
+
+#### PATCH /tm/ltm/pool/~cis-c-tenant~default.coffee
+PATCH https://10.250.18.105:8443/mgmt/tm/ltm/pool/~cis-c-tenant~default.coffee
+Content-Type: application/json
+Authorization: Basic YWRtaW46UEBzc3cwcmQxMjM=
+
+{"name":"default.coffee","partition":"cis-c-tenant","subPath":""}
+
+
+#### POST /tm/ltm/rule
+POST https://10.250.18.105:8443/mgmt/tm/ltm/rule
+Content-Type: application/json
+Authorization: Basic YWRtaW46UEBzc3cwcmQxMjM=
+
+{"apiAnonymous":"when HTTP_REQUEST {\n\t\t\tif { [HTTP::host] matches \"cafe.example.com\" } {\n\t\t\t\t\t\n\t\t\tif { [HTTP::path] starts_with \"/tea\" } {\n\t\t\t\tpool default.tea\n\t\t\t}\n\t\t\t\n\t\t\t}\t\n\t\t}","name":"default.tea","partition":"cis-c-tenant","subPath":""}
+
+
+#### PATCH /tm/ltm/rule/~cis-c-tenant~default.coffee
+PATCH https://10.250.18.105:8443/mgmt/tm/ltm/rule/~cis-c-tenant~default.coffee
+Content-Type: application/json
+Authorization: Basic YWRtaW46UEBzc3cwcmQxMjM=
+
+{"apiAnonymous":"when HTTP_REQUEST {\n\t\t\tif { [HTTP::host] matches \"cafe.example.com\" } {\n\t\t\t\t\t\n\t\t\tif { [HTTP::path] starts_with \"/coffee\" } {\n\t\t\t\tpool default.coffee\n\t\t\t}\n\t\t\t\n\t\t\t}\t\n\t\t}","name":"default.coffee","partition":"cis-c-tenant","subPath":""}
+
+
+#### PATCH /tm/ltm/virtual/~cis-c-tenant~default.gateway.http
+PATCH https://10.250.18.105:8443/mgmt/tm/ltm/virtual/~cis-c-tenant~default.gateway.http
+Content-Type: application/json
+Authorization: Basic YWRtaW46UEBzc3cwcmQxMjM=
+
+{"destination":"1.1.1.2:80","ipProtocol":"tcp","name":"default.gateway.http","partition":"cis-c-tenant","profiles":[{"name":"http"}],"rules":["default.coffee","default.tea"],"subPath":""}
+
+
