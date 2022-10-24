@@ -1,9 +1,13 @@
 package pkg
 
 import (
+	"context"
 	"sync"
 
 	"gitee.com/zongzw/f5-bigip-rest/utils"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -15,6 +19,9 @@ func init() {
 		mutex:     sync.RWMutex{},
 		Gateway:   map[string]*gatewayv1beta1.Gateway{},
 		HTTPRoute: map[string]*gatewayv1beta1.HTTPRoute{},
+		Endpoints: map[string]*v1.Endpoints{},
+		Service:   map[string]*v1.Service{},
+		Node:      map[string]*v1.Node{},
 	}
 }
 
@@ -86,6 +93,8 @@ func (c *SIGCache) ParentRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.
 }
 
 func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.HTTPRoute {
+	defer utils.TimeItToPrometheus()()
+
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -108,7 +117,14 @@ func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1be
 	return hrs
 }
 
-func (c *SIGCache) GetRelatedObjs(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, gwmap *map[string]*gatewayv1beta1.Gateway, hrmap *map[string]*gatewayv1beta1.HTTPRoute) {
+func (c *SIGCache) GetRelatedObjs(
+	gwObjs []*gatewayv1beta1.Gateway,
+	hrObjs []*gatewayv1beta1.HTTPRoute,
+	gwmap *map[string]*gatewayv1beta1.Gateway,
+	hrmap *map[string]*gatewayv1beta1.HTTPRoute) {
+
+	defer utils.TimeItToPrometheus()()
+
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -141,4 +157,34 @@ func (c *SIGCache) GetRelatedObjs(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*ga
 			}
 		}
 	}
+}
+
+func (c *SIGCache) SyncResources(kubeClient kubernetes.Interface) error {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if epsList, err := kubeClient.CoreV1().Endpoints(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, eps := range epsList.Items {
+			c.Endpoints[utils.Keyname(eps.Namespace, eps.Name)] = eps.DeepCopy()
+		}
+	}
+	if svcList, err := kubeClient.CoreV1().Services(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, svc := range svcList.Items {
+			c.Service[utils.Keyname(svc.Namespace, svc.Name)] = svc.DeepCopy()
+		}
+	}
+	if nList, err := kubeClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, n := range nList.Items {
+			c.Node[n.Name] = n.DeepCopy()
+		}
+	}
+	return nil
 }

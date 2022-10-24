@@ -25,6 +25,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -121,6 +122,16 @@ func main() {
 
 	mgr.AddMetricsExtraHandler("/stats", promhttp.Handler())
 
+	if kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig()); err != nil {
+		setupLog.Error(err, "unable to create kubeclient: %s", err.Error())
+		os.Exit(1)
+	} else {
+		if err := pkg.ActiveSIGs.SyncResources(kubeClient); err != nil {
+			setupLog.Error(err, "unable to sync k8s resources to local: %s", err.Error())
+			os.Exit(1)
+		}
+	}
+
 	stopCh := make(chan struct{})
 	go pkg.Deployer(stopCh, bigip)
 
@@ -136,6 +147,11 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HttpRoute")
+		os.Exit(1)
+	}
+
+	if err = controllers.SetupReconcilerForCoreV1WithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Endpoints")
 		os.Exit(1)
 	}
 
