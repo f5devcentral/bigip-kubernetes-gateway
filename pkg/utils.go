@@ -71,7 +71,7 @@ func (c *SIGCache) GetHTTPRoute(keyname string) *gatewayv1beta1.HTTPRoute {
 	return c.HTTPRoute[keyname]
 }
 
-func (c *SIGCache) ParentRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) GatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -117,6 +117,68 @@ func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1be
 	return hrs
 }
 
+func (c *SIGCache) BackendRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if hr == nil {
+		return []*v1.Service{}
+	}
+
+	svcs := []*v1.Service{}
+	for _, rl := range hr.Spec.Rules {
+		for _, br := range rl.BackendRefs {
+			ns := hr.Namespace
+			if br.Namespace != nil {
+				ns = string(*br.Namespace)
+			}
+			if svc, ok := c.Service[utils.Keyname(ns, string(br.Name))]; ok {
+				svcs = append(svcs, svc)
+			}
+		}
+	}
+	return svcs
+}
+
+func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	refered := func(hr *gatewayv1beta1.HTTPRoute) bool {
+		for _, rl := range hr.Spec.Rules {
+			for _, br := range rl.BackendRefs {
+				ns := hr.Namespace
+				if br.Namespace != nil {
+					ns = string(*br.Namespace)
+				}
+				if utils.Keyname(ns, string(br.Name)) == utils.Keyname(svc.Namespace, svc.Name) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	hrKeys := []string{}
+	for _, hr := range c.HTTPRoute {
+		if refered(hr) {
+			hrKeys = append(hrKeys, utils.Keyname(hr.Namespace, hr.Name))
+		}
+	}
+	hrKeys = utils.Unified(hrKeys)
+
+	hrs := []*gatewayv1beta1.HTTPRoute{}
+	for _, hrk := range hrKeys {
+		hrs = append(hrs, c.HTTPRoute[hrk])
+	}
+
+	return hrs
+}
+
 func (c *SIGCache) GetRelatedObjs(
 	gwObjs []*gatewayv1beta1.Gateway,
 	hrObjs []*gatewayv1beta1.HTTPRoute,
@@ -148,7 +210,7 @@ func (c *SIGCache) GetRelatedObjs(
 			name := utils.Keyname(hrObj.Namespace, hrObj.Name)
 			(*hrmap)[name] = c.GetHTTPRoute(name)
 		}
-		gws := c.ParentRefsOf(hrObj)
+		gws := c.GatewayRefsOf(hrObj)
 		for _, gw := range gws {
 			name := utils.Keyname(gw.Namespace, gw.Name)
 			if _, ok := (*gwmap)[name]; !ok {
@@ -159,7 +221,7 @@ func (c *SIGCache) GetRelatedObjs(
 	}
 }
 
-func (c *SIGCache) SyncResources(kubeClient kubernetes.Interface) error {
+func (c *SIGCache) SyncCoreV1Resources(kubeClient kubernetes.Interface) error {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.Lock()

@@ -53,7 +53,7 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}); err != nil {
 				return ctrl.Result{}, err
 			} else {
-				gws := pkg.ActiveSIGs.ParentRefsOf(hr)
+				gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
 				pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
 				if ncfgs, err := pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}); err != nil {
 					return ctrl.Result{}, err

@@ -126,7 +126,7 @@ func main() {
 		setupLog.Error(err, "unable to create kubeclient: %s", err.Error())
 		os.Exit(1)
 	} else {
-		if err := pkg.ActiveSIGs.SyncResources(kubeClient); err != nil {
+		if err := pkg.ActiveSIGs.SyncCoreV1Resources(kubeClient); err != nil {
 			setupLog.Error(err, "unable to sync k8s resources to local: %s", err.Error())
 			os.Exit(1)
 		}
