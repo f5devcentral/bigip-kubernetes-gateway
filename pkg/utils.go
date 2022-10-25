@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +22,7 @@ func init() {
 		HTTPRoute: map[string]*gatewayv1beta1.HTTPRoute{},
 		Endpoints: map[string]*v1.Endpoints{},
 		Service:   map[string]*v1.Service{},
-		Node:      map[string]*v1.Node{},
+		// Node:      map[string]*v1.Node{},
 	}
 }
 
@@ -71,6 +72,42 @@ func (c *SIGCache) GetHTTPRoute(keyname string) *gatewayv1beta1.HTTPRoute {
 	return c.HTTPRoute[keyname]
 }
 
+func (c *SIGCache) GetService(keyname string) *v1.Service {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.Service[keyname]
+}
+
+func (c *SIGCache) GetEndpoints(keyname string) *v1.Endpoints {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.Endpoints[keyname]
+}
+
+// func (c *SIGCache) GetNode(name string) *v1.Node {
+// 	c.mutex.RLock()
+// 	defer c.mutex.RUnlock()
+
+// 	return c.Node[name]
+// }
+
+// func (c *SIGCache) GetAllNodeIPs() []string {
+// 	c.mutex.RLock()
+// 	defer c.mutex.RUnlock()
+
+// 	ips := []string{}
+// 	for _, n := range c.Node {
+// 		for _, addr := range n.Status.Addresses {
+// 			if addr.Type == v1.NodeInternalIP {
+// 				ips = append(ips, addr.Address)
+// 			}
+// 		}
+// 	}
+// 	return ips
+// }
+
 func (c *SIGCache) GatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
@@ -117,7 +154,7 @@ func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1be
 	return hrs
 }
 
-func (c *SIGCache) BackendRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
+func (c *SIGCache) ServiceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
@@ -245,7 +282,8 @@ func (c *SIGCache) SyncCoreV1Resources(kubeClient kubernetes.Interface) error {
 		return err
 	} else {
 		for _, n := range nList.Items {
-			c.Node[n.Name] = n.DeepCopy()
+			// c.Node[n.Name] = n.DeepCopy()
+			k8s.NodeCache.Set(&n)
 		}
 	}
 	return nil

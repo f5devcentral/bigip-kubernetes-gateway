@@ -24,5 +24,5 @@ type SIGCache struct {
 	HTTPRoute map[string]*gatewayv1beta1.HTTPRoute
 	Endpoints map[string]*v1.Endpoints
 	Service   map[string]*v1.Service
-	Node      map[string]*v1.Node
+	// Node      map[string]*v1.Node
 }
