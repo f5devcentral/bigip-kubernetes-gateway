@@ -1,0 +1,40 @@
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: foxfox-route
+spec:
+  parentRefs:
+    - name: np-gw
+      sectionName: http
+  hostnames:
+    - "my.test.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /foxfox
+    backendRefs:
+    - name: foxfox
+      port: 80
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: files-route
+spec:
+  parentRefs:
+  - name: np-gw
+    sectionName: http
+  hostnames:
+  - "my.test.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /tmp
+    backendRefs:
+    - name: files
+      port: 80

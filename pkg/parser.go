@@ -85,7 +85,7 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 		}
 		rules = append(rules, fmt.Sprintf(`	
 			if { %s } {
-				pool %s
+				pool /cis-c-tenant/%s
 			}
 			`, matchCondition, pool))
 	}
@@ -162,7 +162,10 @@ func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 					"profiles":    profiles,
 					"ipProtocol":  ipProtocol,
 					"destination": destination,
-					"rules":       []interface{}{},
+					"sourceAddressTranslation": map[string]interface{}{
+						"type": "automap",
+					},
+					"rules": []interface{}{},
 				}
 				if _, ok := irules[name]; ok {
 					rlt["ltm/virtual/"+name].(map[string]interface{})["rules"] = irules[name]
