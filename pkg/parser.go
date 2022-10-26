@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
@@ -27,9 +28,35 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 			name := strings.Join([]string{ns, string(br.Name)}, ".")
 			rlt["ltm/pool/"+name] = map[string]interface{}{
 				"name":             name,
+				"monitors":         "min 1 of http",
 				"minActiveMembers": 0,
+				"members":          []interface{}{},
+
 				// TODO: there's at least one field for PATCH. or we may need to fix that
 				// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
+			}
+			svc := ActiveSIGs.GetService(utils.Keyname(ns, string(br.Name)))
+			eps := ActiveSIGs.GetEndpoints(utils.Keyname(ns, string(br.Name)))
+			if svc != nil && eps != nil {
+				if mbs, err := k8s.FormatMembersFromServiceEndpoints(svc, eps); err != nil {
+					return map[string]interface{}{}, err
+				} else {
+					fmtmbs := []interface{}{}
+
+					for _, mb := range mbs {
+						sep := ":"
+						if utils.IsIpv6(mb.IpAddr) {
+							sep = "."
+						}
+						fmtmbs = append(fmtmbs, map[string]interface{}{
+							"name":    fmt.Sprintf("%s%s%d", mb.IpAddr, sep, mb.TargetPort),
+							"address": mb.IpAddr,
+						})
+					}
+					rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
+
+					// TODO: parse ARP resources for flannel type network.
+				}
 			}
 		}
 	}
@@ -84,19 +111,21 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 
 		}
 		rules = append(rules, fmt.Sprintf(`	
-			if { %s } {
-				pool /cis-c-tenant/%s
-			}
+				if { %s } {
+					pool /cis-c-tenant/%s
+				}
 			`, matchCondition, pool))
 	}
 
 	ruleObj := map[string]interface{}{
 		"name": name,
-		"apiAnonymous": fmt.Sprintf(`when HTTP_REQUEST {
-			if { %s } {
-				%s
+		"apiAnonymous": fmt.Sprintf(`
+			when HTTP_REQUEST {
+				if { %s } {
+					%s
+				}
 			}
-		}`, hostnameCondition, strings.Join(rules, "")),
+		`, hostnameCondition, strings.Join(rules, "\n")),
 	}
 
 	rlt["ltm/rule/"+name] = ruleObj

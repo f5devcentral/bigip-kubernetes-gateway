@@ -1,40 +1,37 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: foxfox
+  name: coffee
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: foxfox
+      app: coffee
   template:
     metadata:
       labels:
-        app: foxfox
+        app: coffee
     spec:
       containers:
-      - name: foxfox
-        image: nginx:latest
+      - name: coffee
+        image: nginxdemos/nginx-hello:plain-text
         ports:
-        - containerPort: 80
-
+        - containerPort: 8080
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
-  name: foxfox
+  name: coffee
 spec:
+  type: NodePort
   ports:
   - port: 80
     targetPort: 8080
     protocol: TCP
     name: http
   selector:
-    app: foxfox
-
+    app: coffee
 ---
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,7 +48,7 @@ spec:
     spec:
       containers:
       - name: tea
-        image: nginx:latest
+        image: nginxdemos/nginx-hello:plain-text
         ports:
         - containerPort: 8080
 ---
@@ -60,6 +57,7 @@ kind: Service
 metadata:
   name: tea
 spec:
+  type: NodePort
   ports:
   - port: 80
     targetPort: 8080

@@ -1,9 +1,14 @@
 package pkg
 
 import (
+	"context"
 	"sync"
 
+	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -15,6 +20,9 @@ func init() {
 		mutex:     sync.RWMutex{},
 		Gateway:   map[string]*gatewayv1beta1.Gateway{},
 		HTTPRoute: map[string]*gatewayv1beta1.HTTPRoute{},
+		Endpoints: map[string]*v1.Endpoints{},
+		Service:   map[string]*v1.Service{},
+		// Node:      map[string]*v1.Node{},
 	}
 }
 
@@ -64,7 +72,73 @@ func (c *SIGCache) GetHTTPRoute(keyname string) *gatewayv1beta1.HTTPRoute {
 	return c.HTTPRoute[keyname]
 }
 
-func (c *SIGCache) ParentRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) GetService(keyname string) *v1.Service {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.Service[keyname]
+}
+
+func (c *SIGCache) GetEndpoints(keyname string) *v1.Endpoints {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.Endpoints[keyname]
+}
+
+func (c *SIGCache) SetEndpoints(eps *v1.Endpoints) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if eps != nil {
+		c.Endpoints[utils.Keyname(eps.Namespace, eps.Name)] = eps
+	}
+}
+func (c *SIGCache) UnsetEndpoints(keyname string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	delete(c.Endpoints, keyname)
+}
+
+func (c *SIGCache) SetService(svc *v1.Service) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if svc != nil {
+		c.Service[utils.Keyname(svc.Namespace, svc.Name)] = svc
+	}
+}
+func (c *SIGCache) UnsetService(keyname string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	delete(c.Service, keyname)
+}
+
+// func (c *SIGCache) GetNode(name string) *v1.Node {
+// 	c.mutex.RLock()
+// 	defer c.mutex.RUnlock()
+
+// 	return c.Node[name]
+// }
+
+// func (c *SIGCache) GetAllNodeIPs() []string {
+// 	c.mutex.RLock()
+// 	defer c.mutex.RUnlock()
+
+// 	ips := []string{}
+// 	for _, n := range c.Node {
+// 		for _, addr := range n.Status.Addresses {
+// 			if addr.Type == v1.NodeInternalIP {
+// 				ips = append(ips, addr.Address)
+// 			}
+// 		}
+// 	}
+// 	return ips
+// }
+
+func (c *SIGCache) GatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -86,6 +160,8 @@ func (c *SIGCache) ParentRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.
 }
 
 func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.HTTPRoute {
+	defer utils.TimeItToPrometheus()()
+
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -108,7 +184,102 @@ func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1be
 	return hrs
 }
 
-func (c *SIGCache) GetRelatedObjs(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, gwmap *map[string]*gatewayv1beta1.Gateway, hrmap *map[string]*gatewayv1beta1.HTTPRoute) {
+func (c *SIGCache) ServiceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if hr == nil {
+		return []*v1.Service{}
+	}
+
+	svcs := []*v1.Service{}
+	for _, rl := range hr.Spec.Rules {
+		for _, br := range rl.BackendRefs {
+			ns := hr.Namespace
+			if br.Namespace != nil {
+				ns = string(*br.Namespace)
+			}
+			if svc, ok := c.Service[utils.Keyname(ns, string(br.Name))]; ok {
+				svcs = append(svcs, svc)
+			}
+		}
+	}
+	return svcs
+}
+
+// func (c *SIGCache) IsReferredByHTTPRoute(svcKey string) bool {
+// 	defer utils.TimeItToPrometheus()()
+
+// 	c.mutex.RLock()
+// 	defer c.mutex.RUnlock()
+
+// 	for _, hr := range c.HTTPRoute {
+// 		for _, rl := range hr.Spec.Rules {
+// 			for _, br := range rl.BackendRefs {
+// 				ns := hr.Namespace
+// 				if br.Namespace != nil {
+// 					ns = string(*br.Namespace)
+// 				}
+// 				if utils.Keyname(ns, string(br.Name)) == svcKey {
+// 					return true
+// 				}
+// 			}
+// 		}
+// 	}
+// 	return false
+// }
+
+func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if svc == nil {
+		return []*gatewayv1beta1.HTTPRoute{}
+	}
+
+	refered := func(hr *gatewayv1beta1.HTTPRoute) bool {
+		for _, rl := range hr.Spec.Rules {
+			for _, br := range rl.BackendRefs {
+				ns := hr.Namespace
+				if br.Namespace != nil {
+					ns = string(*br.Namespace)
+				}
+				if utils.Keyname(ns, string(br.Name)) == utils.Keyname(svc.Namespace, svc.Name) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	hrKeys := []string{}
+	for _, hr := range c.HTTPRoute {
+		if refered(hr) {
+			hrKeys = append(hrKeys, utils.Keyname(hr.Namespace, hr.Name))
+		}
+	}
+	hrKeys = utils.Unified(hrKeys)
+
+	hrs := []*gatewayv1beta1.HTTPRoute{}
+	for _, hrk := range hrKeys {
+		hrs = append(hrs, c.HTTPRoute[hrk])
+	}
+
+	return hrs
+}
+
+func (c *SIGCache) GetRelatedObjs(
+	gwObjs []*gatewayv1beta1.Gateway,
+	hrObjs []*gatewayv1beta1.HTTPRoute,
+	gwmap *map[string]*gatewayv1beta1.Gateway,
+	hrmap *map[string]*gatewayv1beta1.HTTPRoute) {
+
+	defer utils.TimeItToPrometheus()()
+
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -132,7 +303,7 @@ func (c *SIGCache) GetRelatedObjs(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*ga
 			name := utils.Keyname(hrObj.Namespace, hrObj.Name)
 			(*hrmap)[name] = c.GetHTTPRoute(name)
 		}
-		gws := c.ParentRefsOf(hrObj)
+		gws := c.GatewayRefsOf(hrObj)
 		for _, gw := range gws {
 			name := utils.Keyname(gw.Namespace, gw.Name)
 			if _, ok := (*gwmap)[name]; !ok {
@@ -141,4 +312,35 @@ func (c *SIGCache) GetRelatedObjs(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*ga
 			}
 		}
 	}
+}
+
+func (c *SIGCache) SyncCoreV1Resources(kubeClient kubernetes.Interface) error {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if epsList, err := kubeClient.CoreV1().Endpoints(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, eps := range epsList.Items {
+			c.Endpoints[utils.Keyname(eps.Namespace, eps.Name)] = eps.DeepCopy()
+		}
+	}
+	if svcList, err := kubeClient.CoreV1().Services(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, svc := range svcList.Items {
+			c.Service[utils.Keyname(svc.Namespace, svc.Name)] = svc.DeepCopy()
+		}
+	}
+	if nList, err := kubeClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, n := range nList.Items {
+			// c.Node[n.Name] = n.DeepCopy()
+			k8s.NodeCache.Set(&n)
+		}
+	}
+	return nil
 }

@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"os"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,9 +44,13 @@ type HttpRouteReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	zlog := log.FromContext(ctx)
 
 	var obj gatewayv1beta1.HTTPRoute
+	if err := syncHTTPRouteAtStart(r, ctx); err != nil {
+		zlog.Error(err, "failed to sync httproutes")
+		os.Exit(1)
+	}
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
@@ -53,7 +58,7 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}); err != nil {
 				return ctrl.Result{}, err
 			} else {
-				gws := pkg.ActiveSIGs.ParentRefsOf(hr)
+				gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
 				pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
 				if ncfgs, err := pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}); err != nil {
 					return ctrl.Result{}, err
