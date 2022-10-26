@@ -18,14 +18,18 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
+	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "k8s.io/api/core/v1"
+
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 type EndpointsReconciler struct {
@@ -44,24 +48,66 @@ type NodeReconciler struct {
 }
 
 func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
 
-	// var obj v1.Endpoints
-	// if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+	var obj v1.Endpoints
+	// zlog := log.FromContext(ctx)
+	// zlog.V(1).Info("resource event: " + req.NamespacedName.String())
+	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
+			hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
+			pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
 
-	// } else {
-	// 	cpObj := obj.DeepCopy()
-	// }
-	return ctrl.Result{}, nil
+			return reapply(hrs)
+		} else {
+			return ctrl.Result{}, err
+		}
+	} else {
+		cpObj := obj.DeepCopy()
+		pkg.ActiveSIGs.SetEndpoints(cpObj)
+		svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
+		hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
+		return reapply(hrs)
+	}
 }
 
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
-	return ctrl.Result{}, nil
+
+	var obj v1.Service
+	// zlog := log.FromContext(ctx)
+	// zlog.V(1).Info("resource event: " + req.NamespacedName.String())
+	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
+			hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
+			pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
+			return reapply(hrs)
+		} else {
+			return ctrl.Result{}, err
+		}
+	} else {
+		cpObj := obj.DeepCopy()
+		pkg.ActiveSIGs.SetService(cpObj)
+		svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
+		hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
+		return reapply(hrs)
+	}
 }
 
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+
+	var obj v1.Node
+	// zlog := log.FromContext(ctx)
+	// zlog.V(1).Info("resource event: " + req.NamespacedName.String())
+	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			k8s.NodeCache.Unset(req.Name)
+		} else {
+			return ctrl.Result{}, err
+		}
+	} else {
+		k8s.NodeCache.Set(obj.DeepCopy())
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -87,5 +133,26 @@ func SetupReconcilerForCoreV1WithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf(errmsg)
 	} else {
 		return nil
+	}
+}
+
+func reapply(hrs []*gatewayv1beta1.HTTPRoute) (ctrl.Result, error) {
+
+	if len(hrs) == 0 {
+		return ctrl.Result{}, nil
+	}
+	if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs); err != nil {
+		return ctrl.Result{}, err
+	} else {
+		bcfgs, _ := json.Marshal(ncfgs)
+		ctrl.Log.V(1).Info(fmt.Sprintf("sending deploy configs: %s", bcfgs))
+		pkg.PendingDeploys <- pkg.DeployRequest{
+			From: nil,
+			To:   &ncfgs,
+			StatusFunc: func() {
+				// do something
+			},
+		}
+		return ctrl.Result{}, nil
 	}
 }

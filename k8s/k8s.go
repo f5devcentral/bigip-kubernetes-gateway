@@ -21,7 +21,7 @@ func init() {
 func (ns *Nodes) Set(n *v1.Node) error {
 	for _, taint := range n.Spec.Taints {
 		if taint.Key == "node.kubernetes.io/unreachable" && taint.Effect == "NoSchedule" {
-			NodeCache.Unset(n)
+			NodeCache.Unset(n.Name)
 			return nil
 		}
 	}
@@ -79,11 +79,11 @@ func (ns *Nodes) Set(n *v1.Node) error {
 	return nil
 }
 
-func (ns *Nodes) Unset(n *v1.Node) error {
+func (ns *Nodes) Unset(name string) error {
 	NodeCache.mutex <- true
 	defer func() { <-NodeCache.mutex }()
 
-	delete(NodeCache.Items, n.Name)
+	delete(NodeCache.Items, name)
 
 	return nil
 }

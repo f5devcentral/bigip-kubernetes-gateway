@@ -28,8 +28,10 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 			name := strings.Join([]string{ns, string(br.Name)}, ".")
 			rlt["ltm/pool/"+name] = map[string]interface{}{
 				"name":             name,
-				"monitors":         "http",
+				"monitors":         "min 1 of http",
 				"minActiveMembers": 0,
+				"members":          []interface{}{},
+
 				// TODO: there's at least one field for PATCH. or we may need to fix that
 				// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
 			}
@@ -109,19 +111,21 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 
 		}
 		rules = append(rules, fmt.Sprintf(`	
-			if { %s } {
-				pool /cis-c-tenant/%s
-			}
+				if { %s } {
+					pool /cis-c-tenant/%s
+				}
 			`, matchCondition, pool))
 	}
 
 	ruleObj := map[string]interface{}{
 		"name": name,
-		"apiAnonymous": fmt.Sprintf(`when HTTP_REQUEST {
-			if { %s } {
-				%s
+		"apiAnonymous": fmt.Sprintf(`
+			when HTTP_REQUEST {
+				if { %s } {
+					%s
+				}
 			}
-		}`, hostnameCondition, strings.Join(rules, "")),
+		`, hostnameCondition, strings.Join(rules, "\n")),
 	}
 
 	rlt["ltm/rule/"+name] = ruleObj

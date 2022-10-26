@@ -86,6 +86,36 @@ func (c *SIGCache) GetEndpoints(keyname string) *v1.Endpoints {
 	return c.Endpoints[keyname]
 }
 
+func (c *SIGCache) SetEndpoints(eps *v1.Endpoints) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if eps != nil {
+		c.Endpoints[utils.Keyname(eps.Namespace, eps.Name)] = eps
+	}
+}
+func (c *SIGCache) UnsetEndpoints(keyname string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	delete(c.Endpoints, keyname)
+}
+
+func (c *SIGCache) SetService(svc *v1.Service) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if svc != nil {
+		c.Service[utils.Keyname(svc.Namespace, svc.Name)] = svc
+	}
+}
+func (c *SIGCache) UnsetService(keyname string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	delete(c.Service, keyname)
+}
+
 // func (c *SIGCache) GetNode(name string) *v1.Node {
 // 	c.mutex.RLock()
 // 	defer c.mutex.RUnlock()
@@ -179,11 +209,37 @@ func (c *SIGCache) ServiceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
 	return svcs
 }
 
+// func (c *SIGCache) IsReferredByHTTPRoute(svcKey string) bool {
+// 	defer utils.TimeItToPrometheus()()
+
+// 	c.mutex.RLock()
+// 	defer c.mutex.RUnlock()
+
+// 	for _, hr := range c.HTTPRoute {
+// 		for _, rl := range hr.Spec.Rules {
+// 			for _, br := range rl.BackendRefs {
+// 				ns := hr.Namespace
+// 				if br.Namespace != nil {
+// 					ns = string(*br.Namespace)
+// 				}
+// 				if utils.Keyname(ns, string(br.Name)) == svcKey {
+// 					return true
+// 				}
+// 			}
+// 		}
+// 	}
+// 	return false
+// }
+
 func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
+
+	if svc == nil {
+		return []*gatewayv1beta1.HTTPRoute{}
+	}
 
 	refered := func(hr *gatewayv1beta1.HTTPRoute) bool {
 		for _, rl := range hr.Spec.Rules {

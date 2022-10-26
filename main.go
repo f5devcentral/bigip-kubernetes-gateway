@@ -135,7 +135,7 @@ func main() {
 	stopCh := make(chan struct{})
 	go pkg.Deployer(stopCh, bigip)
 
-	if err = (&controllers.GatewayReconciler{
+	if err := (&controllers.GatewayReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
@@ -169,4 +169,5 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+
 }
