@@ -74,8 +74,9 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 
 	rules := []string{}
 	for _, rl := range hr.Spec.Rules {
-		matchConditions := []string{}
+		ruleConditions := []string{}
 		for _, match := range rl.Matches {
+			matchConditions := []string{}
 			if match.Path != nil {
 				switch *match.Path.Type {
 				case gatewayv1beta1.PathMatchPathPrefix:
@@ -95,10 +96,11 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 			if match.QueryParams != nil {
 				return map[string]interface{}{}, fmt.Errorf("match type QueryParams not supported yet")
 			}
+			ruleConditions = append(ruleConditions, strings.Join(matchConditions, " and "))
 		}
-		matchCondition := strings.Join(matchConditions, " or ")
-		if matchCondition == "" {
-			matchCondition = "1 eq 1"
+		ruleCondition := strings.Join(ruleConditions, " or ")
+		if ruleCondition == "" {
+			ruleCondition = "1 eq 1"
 		}
 		// TODO: only the last backendRef is used.
 		var pool string
@@ -114,13 +116,14 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 				if { %s } {
 					pool /cis-c-tenant/%s
 				}
-			`, matchCondition, pool))
+			`, ruleCondition, pool))
 	}
 
 	ruleObj := map[string]interface{}{
 		"name": name,
 		"apiAnonymous": fmt.Sprintf(`
 			when HTTP_REQUEST {
+				log local0. "request host: [HTTP::host], uri: [HTTP::uri], path: [HTTP::path]"
 				if { %s } {
 					%s
 				}

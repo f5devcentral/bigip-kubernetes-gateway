@@ -32,6 +32,9 @@ spec:
     - path:
         type: PathPrefix
         value: /coffee
+    - path:
+        type: PathPrefix
+        value: /zongzw
     backendRefs:
     - name: coffee
       port: 80
