@@ -147,6 +147,7 @@ func reapply(hrs []*gatewayv1beta1.HTTPRoute) (ctrl.Result, error) {
 		bcfgs, _ := json.Marshal(ncfgs)
 		ctrl.Log.V(1).Info(fmt.Sprintf("sending deploy configs: %s", bcfgs))
 		pkg.PendingDeploys <- pkg.DeployRequest{
+			Meta: fmt.Sprintf("upserting svc/eps related by httproutes"),
 			From: nil,
 			To:   &ncfgs,
 			StatusFunc: func() {

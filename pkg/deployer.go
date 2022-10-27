@@ -21,6 +21,7 @@ func Deployer(stopCh chan struct{}, bigip *f5_bigip.BIGIP) {
 		case <-stopCh:
 			return
 		case r := <-PendingDeploys:
+			slog.Debugf("Processing request: %s", r.Meta)
 			err := deploy(bigip, r.From, r.To)
 			if err != nil {
 				// report the error to status or ...

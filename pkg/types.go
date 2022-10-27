@@ -8,6 +8,7 @@ import (
 )
 
 type DeployRequest struct {
+	Meta       string
 	From       *map[string]interface{}
 	To         *map[string]interface{}
 	StatusFunc func()

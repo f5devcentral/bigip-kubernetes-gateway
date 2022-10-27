@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,7 +52,10 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := syncGatewaysAtStart(r, ctx); err != nil {
 		zlog.Error(err, "failed to sync gateways")
 		os.Exit(1)
+	} else if syncGateway != synced {
+		return ctrl.Result{Requeue: true}, nil
 	}
+	zlog.V(1).Info("handling " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
@@ -59,12 +63,14 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}); err != nil {
 				return ctrl.Result{}, err
 			} else {
+				zlog.V(1).Info("handling + deleting " + req.NamespacedName.String())
 				hrs := pkg.ActiveSIGs.AttachedHTTPRoutes(gw)
 				pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
 				if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					pkg.PendingDeploys <- pkg.DeployRequest{
+						Meta: fmt.Sprintf("deleting gateway '%s'", req.NamespacedName.String()),
 						From: &ocfgs,
 						To:   &ncfgs,
 						StatusFunc: func() {
@@ -80,16 +86,20 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	} else {
 		// upsert resources
+		zlog.V(1).Info("handling + upserting " + req.NamespacedName.String())
 		ogw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
 		if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ogw}, nil); err != nil {
+			zlog.Error(err, "handling + upserting + parse related ocfgs "+req.NamespacedName.String())
 			return ctrl.Result{}, err
 		} else {
 			ngw := obj.DeepCopy()
 			pkg.ActiveSIGs.SetGateway(ngw)
 			if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ngw}, []*gatewayv1beta1.HTTPRoute{}); err != nil {
+				zlog.Error(err, "handling + upserting + parse related ncfgs "+req.NamespacedName.String())
 				return ctrl.Result{}, err
 			} else {
 				pkg.PendingDeploys <- pkg.DeployRequest{
+					Meta: fmt.Sprintf("upserting gateway '%s'", req.NamespacedName.String()),
 					From: &ocfgs,
 					To:   &ncfgs,
 					StatusFunc: func() {

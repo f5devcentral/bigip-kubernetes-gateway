@@ -7,9 +7,10 @@ import (
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func init() {
@@ -139,9 +140,15 @@ func (c *SIGCache) UnsetService(keyname string) {
 // }
 
 func (c *SIGCache) GatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
+	defer utils.TimeItToPrometheus()()
+
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
+	return c._gatewayRefsOf(hr)
+}
+
+func (c *SIGCache) _gatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
 	if hr == nil {
 		return []*gatewayv1beta1.Gateway{}
 	}
@@ -165,6 +172,10 @@ func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1be
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
+	return c._attachedHTTPRoutes(gw)
+}
+
+func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.HTTPRoute {
 	if gw == nil {
 		return []*gatewayv1beta1.HTTPRoute{}
 	}
@@ -190,6 +201,10 @@ func (c *SIGCache) ServiceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
+	return c._serviceRefsOf(hr)
+}
+
+func (c *SIGCache) _serviceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
 	if hr == nil {
 		return []*v1.Service{}
 	}
@@ -237,6 +252,10 @@ func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
+	return c._HTTPRoutesRefsOf(svc)
+}
+
+func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
 	if svc == nil {
 		return []*gatewayv1beta1.HTTPRoute{}
 	}
@@ -283,17 +302,25 @@ func (c *SIGCache) GetRelatedObjs(
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
+	c._getRelatedObjs(gwObjs, hrObjs, gwmap, hrmap)
+}
+
+func (c *SIGCache) _getRelatedObjs(
+	gwObjs []*gatewayv1beta1.Gateway,
+	hrObjs []*gatewayv1beta1.HTTPRoute,
+	gwmap *map[string]*gatewayv1beta1.Gateway,
+	hrmap *map[string]*gatewayv1beta1.HTTPRoute) {
 	for _, gwObj := range gwObjs {
 		if gwObj != nil {
 			name := utils.Keyname(gwObj.Namespace, gwObj.Name)
-			(*gwmap)[name] = c.GetGateway(name)
+			(*gwmap)[name] = c.Gateway[name]
 		}
-		hrs := c.AttachedHTTPRoutes(gwObj)
+		hrs := c._attachedHTTPRoutes(gwObj)
 		for _, hr := range hrs {
 			name := utils.Keyname(hr.Namespace, hr.Name)
 			if _, ok := (*hrmap)[name]; !ok {
-				(*hrmap)[name] = c.GetHTTPRoute(name)
-				c.GetRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, gwmap, hrmap)
+				(*hrmap)[name] = c.HTTPRoute[name]
+				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, gwmap, hrmap)
 			}
 		}
 	}
@@ -301,14 +328,14 @@ func (c *SIGCache) GetRelatedObjs(
 	for _, hrObj := range hrObjs {
 		if hrObj != nil {
 			name := utils.Keyname(hrObj.Namespace, hrObj.Name)
-			(*hrmap)[name] = c.GetHTTPRoute(name)
+			(*hrmap)[name] = c.HTTPRoute[name]
 		}
-		gws := c.GatewayRefsOf(hrObj)
+		gws := c._gatewayRefsOf(hrObj)
 		for _, gw := range gws {
 			name := utils.Keyname(gw.Namespace, gw.Name)
 			if _, ok := (*gwmap)[name]; !ok {
-				(*gwmap)[name] = c.GetGateway(name)
-				c.GetRelatedObjs([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}, gwmap, hrmap)
+				(*gwmap)[name] = c.Gateway[name]
+				c._getRelatedObjs([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}, gwmap, hrmap)
 			}
 		}
 	}
@@ -324,6 +351,7 @@ func (c *SIGCache) SyncCoreV1Resources(kubeClient kubernetes.Interface) error {
 		return err
 	} else {
 		for _, eps := range epsList.Items {
+			slog.Debugf("found eps %s", utils.Keyname(eps.Namespace, eps.Name))
 			c.Endpoints[utils.Keyname(eps.Namespace, eps.Name)] = eps.DeepCopy()
 		}
 	}
@@ -331,6 +359,7 @@ func (c *SIGCache) SyncCoreV1Resources(kubeClient kubernetes.Interface) error {
 		return err
 	} else {
 		for _, svc := range svcList.Items {
+			slog.Debugf("found svc %s", utils.Keyname(svc.Namespace, svc.Name))
 			c.Service[utils.Keyname(svc.Namespace, svc.Name)] = svc.DeepCopy()
 		}
 	}
@@ -339,6 +368,7 @@ func (c *SIGCache) SyncCoreV1Resources(kubeClient kubernetes.Interface) error {
 	} else {
 		for _, n := range nList.Items {
 			// c.Node[n.Name] = n.DeepCopy()
+			slog.Debugf("found node %s", n.Name)
 			k8s.NodeCache.Set(&n)
 		}
 	}
