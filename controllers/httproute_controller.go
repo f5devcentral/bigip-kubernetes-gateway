@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
@@ -50,7 +51,11 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := syncHTTPRouteAtStart(r, ctx); err != nil {
 		zlog.Error(err, "failed to sync httproutes")
 		os.Exit(1)
+	} else if syncHTTPRoute != synced {
+		return ctrl.Result{Requeue: true}, nil
 	}
+
+	zlog.V(1).Info("handling " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
@@ -64,6 +69,7 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 					return ctrl.Result{}, err
 				} else {
 					pkg.PendingDeploys <- pkg.DeployRequest{
+						Meta: fmt.Sprintf("deleting httproute '%s'", req.NamespacedName.String()),
 						From: &ocfgs,
 						To:   &ncfgs,
 						StatusFunc: func() {
@@ -79,6 +85,7 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	} else {
 		// upsert resources
+		zlog.V(1).Info("upserting " + req.NamespacedName.String())
 		hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
 		if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}); err != nil {
 			return ctrl.Result{}, err
@@ -89,6 +96,7 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{}, err
 			} else {
 				pkg.PendingDeploys <- pkg.DeployRequest{
+					Meta: fmt.Sprintf("upserting httproute '%s'", req.NamespacedName.String()),
 					From: &ocfgs,
 					To:   &ncfgs,
 					StatusFunc: func() {

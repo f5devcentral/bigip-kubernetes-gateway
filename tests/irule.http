@@ -32,12 +32,22 @@ Authorization: Basic YWRtaW46UEBzc3cwcmQxMjM=
 
 
 #### PATCH /tm/ltm/pool/~cis-c-tenant~default.coffee
-PATCH https://10.250.18.105:8443/mgmt/tm/ltm/pool/~cis-c-tenant~default.coffee
+PATCH https://10.250.15.180/mgmt/tm/ltm/pool/~cis-c-tenant~default.coffee
 Content-Type: application/json
 Authorization: Basic YWRtaW46UEBzc3cwcmQxMjM=
 
-{"name":"default.coffee","partition":"cis-c-tenant","subPath":""}
+{
+    "members": [],
+    "monitor": "min 2 of http tcp",
+    "name":"default.coffee",
+    "partition":"cis-c-tenant",
+    "subPath":""
+}
 
+###
+GET https://10.250.15.180/mgmt/tm/ltm/pool/~cis-c-tenant~default.coffee?expandSubcollections=true
+Content-Type: application/json
+Authorization: Basic YWRtaW46UEBzc3cwcmQxMjM=
 
 #### POST /tm/ltm/rule
 POST https://10.250.18.105:8443/mgmt/tm/ltm/rule
