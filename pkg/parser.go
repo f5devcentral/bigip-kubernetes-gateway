@@ -78,7 +78,11 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 		for _, match := range rl.Matches {
 			matchConditions := []string{}
 			if match.Path != nil {
-				switch *match.Path.Type {
+				matchType := gatewayv1beta1.PathMatchPathPrefix
+				if match.Path.Type != nil {
+					matchType = *match.Path.Type
+				}
+				switch matchType {
 				case gatewayv1beta1.PathMatchPathPrefix:
 					matchConditions = append(matchConditions, fmt.Sprintf(`[HTTP::path] starts_with "%s"`, *match.Path.Value))
 				case gatewayv1beta1.PathMatchExact:
@@ -88,13 +92,35 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 				}
 			}
 			if match.Headers != nil {
-				return map[string]interface{}{}, fmt.Errorf("match type Headers not supported yet")
+				for _, header := range match.Headers {
+					matchType := gatewayv1beta1.HeaderMatchExact
+					if header.Type != nil {
+						matchType = *header.Type
+					}
+					switch matchType {
+					case gatewayv1beta1.HeaderMatchExact:
+						matchConditions = append(matchConditions, fmt.Sprintf(`[HTTP::header "%s"] eq "%s"`, header.Name, header.Value))
+					case gatewayv1beta1.HeaderMatchRegularExpression:
+						matchConditions = append(matchConditions, fmt.Sprintf(`[HTTP::header "%s"] matches "%s"`, header.Name, header.Value))
+					}
+				}
 			}
 			if match.Method != nil {
-				return map[string]interface{}{}, fmt.Errorf("match type Method not supported yet")
+				matchConditions = append(matchConditions, fmt.Sprintf(`[HTTP::method] eq "%s"`, *match.Method))
 			}
 			if match.QueryParams != nil {
-				return map[string]interface{}{}, fmt.Errorf("match type QueryParams not supported yet")
+				for _, queryParam := range match.QueryParams {
+					matchType := gatewayv1beta1.QueryParamMatchExact
+					if queryParam.Type != nil {
+						matchType = *queryParam.Type
+					}
+					switch matchType {
+					case gatewayv1beta1.QueryParamMatchExact:
+						matchConditions = append(matchConditions, fmt.Sprintf(`[URI::query [HTTP::uri] "%s"] eq "%s"`, queryParam.Name, queryParam.Value))
+					case gatewayv1beta1.QueryParamMatchRegularExpression:
+						matchConditions = append(matchConditions, fmt.Sprintf(`[URI::query [HTTP::uri] "%s"] matches "%s"`, queryParam.Name, queryParam.Value))
+					}
+				}
 			}
 			ruleConditions = append(ruleConditions, strings.Join(matchConditions, " and "))
 		}
@@ -123,7 +149,12 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 		"name": name,
 		"apiAnonymous": fmt.Sprintf(`
 			when HTTP_REQUEST {
-				log local0. "request host: [HTTP::host], uri: [HTTP::uri], path: [HTTP::path]"
+				log local0. "request host: [HTTP::host], uri: [HTTP::uri], path: [HTTP::path], method: [HTTP::method]"
+				log local0. "headers: [HTTP::header names]"
+				foreach header [HTTP::header names] {
+					log local0. "$header: [HTTP::header value $header]"
+				}
+				log local0. "queryparams: [HTTP::query]"
 				if { %s } {
 					%s
 				}
