@@ -294,22 +294,26 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 func (c *SIGCache) GetRelatedObjs(
 	gwObjs []*gatewayv1beta1.Gateway,
 	hrObjs []*gatewayv1beta1.HTTPRoute,
+	svcObjs []*v1.Service,
 	gwmap *map[string]*gatewayv1beta1.Gateway,
-	hrmap *map[string]*gatewayv1beta1.HTTPRoute) {
+	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
+	svcmap *map[string]*v1.Service) {
 
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	c._getRelatedObjs(gwObjs, hrObjs, gwmap, hrmap)
+	c._getRelatedObjs(gwObjs, hrObjs, svcObjs, gwmap, hrmap, svcmap)
 }
 
 func (c *SIGCache) _getRelatedObjs(
 	gwObjs []*gatewayv1beta1.Gateway,
 	hrObjs []*gatewayv1beta1.HTTPRoute,
+	svcObjs []*v1.Service,
 	gwmap *map[string]*gatewayv1beta1.Gateway,
-	hrmap *map[string]*gatewayv1beta1.HTTPRoute) {
+	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
+	svcmap *map[string]*v1.Service) {
 	for _, gwObj := range gwObjs {
 		if gwObj != nil {
 			name := utils.Keyname(gwObj.Namespace, gwObj.Name)
@@ -320,7 +324,7 @@ func (c *SIGCache) _getRelatedObjs(
 			name := utils.Keyname(hr.Namespace, hr.Name)
 			if _, ok := (*hrmap)[name]; !ok {
 				(*hrmap)[name] = c.HTTPRoute[name]
-				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, gwmap, hrmap)
+				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}, gwmap, hrmap, svcmap)
 			}
 		}
 	}
@@ -335,7 +339,30 @@ func (c *SIGCache) _getRelatedObjs(
 			name := utils.Keyname(gw.Namespace, gw.Name)
 			if _, ok := (*gwmap)[name]; !ok {
 				(*gwmap)[name] = c.Gateway[name]
-				c._getRelatedObjs([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}, gwmap, hrmap)
+				c._getRelatedObjs([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}, gwmap, hrmap, svcmap)
+			}
+		}
+		svcs := c._serviceRefsOf(hrObj)
+		for _, svc := range svcs {
+			name := utils.Keyname(svc.Namespace, svc.Name)
+			if _, ok := (*svcmap)[name]; !ok {
+				(*svcmap)[name] = c.Service[name]
+				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc}, gwmap, hrmap, svcmap)
+			}
+		}
+	}
+
+	for _, svcObj := range svcObjs {
+		if svcObj != nil {
+			name := utils.Keyname(svcObj.Namespace, svcObj.Name)
+			(*svcmap)[name] = c.Service[name]
+		}
+		hrs := c._HTTPRoutesRefsOf(svcObj)
+		for _, hr := range hrs {
+			name := utils.Keyname(hr.Namespace, hr.Name)
+			if _, ok := (*hrmap)[name]; !ok {
+				(*hrmap)[name] = c.HTTPRoute[name]
+				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}, gwmap, hrmap, svcmap)
 			}
 		}
 	}
