@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -60,13 +61,13 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
 			gw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
-			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}); err != nil {
+			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				zlog.V(1).Info("handling + deleting " + req.NamespacedName.String())
 				hrs := pkg.ActiveSIGs.AttachedHTTPRoutes(gw)
 				pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
-				if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs); err != nil {
+				if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs, []*v1.Service{}); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					pkg.PendingDeploys <- pkg.DeployRequest{
@@ -88,13 +89,13 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// upsert resources
 		zlog.V(1).Info("handling + upserting " + req.NamespacedName.String())
 		ogw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
-		if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ogw}, nil); err != nil {
+		if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ogw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
 			zlog.Error(err, "handling + upserting + parse related ocfgs "+req.NamespacedName.String())
 			return ctrl.Result{}, err
 		} else {
 			ngw := obj.DeepCopy()
 			pkg.ActiveSIGs.SetGateway(ngw)
-			if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ngw}, []*gatewayv1beta1.HTTPRoute{}); err != nil {
+			if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ngw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
 				zlog.Error(err, "handling + upserting + parse related ncfgs "+req.NamespacedName.String())
 				return ctrl.Result{}, err
 			} else {

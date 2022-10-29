@@ -32,6 +32,9 @@ spec:
     - path:
         type: PathPrefix
         value: /coffee
+    - path:
+        type: PathPrefix
+        value: /zongzw
     backendRefs:
     - name: coffee
       port: 80
@@ -53,6 +56,75 @@ spec:
     - path:
         type: PathPrefix
         value: /tea
+    backendRefs:
+    - name: tea
+      port: 80
+
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: test-header
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /header-test
+    - headers:
+      - name: test
+        value: zongzw
+      - name: dev
+        value: andrew
+    backendRefs:
+    - name: tea
+      port: 80
+
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: test-method
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
+  rules:
+  - matches:
+    - method: GET
+    - method: OPTIONS
+    backendRefs:
+    - name: tea
+      port: 80
+
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: test-query-params
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
+  rules:
+  - matches:
+    - queryParams:
+      - name: test
+        value: zongzw
+      - name: dev
+        value: andrew
     backendRefs:
     - name: tea
       port: 80

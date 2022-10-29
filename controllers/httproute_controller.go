@@ -22,6 +22,7 @@ import (
 	"os"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -60,12 +61,12 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
 			hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
-			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}); err != nil {
+			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
 				pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
-				if ncfgs, err := pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}); err != nil {
+				if ncfgs, err := pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					pkg.PendingDeploys <- pkg.DeployRequest{
@@ -87,12 +88,12 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// upsert resources
 		zlog.V(1).Info("upserting " + req.NamespacedName.String())
 		hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
-		if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}); err != nil {
+		if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}); err != nil {
 			return ctrl.Result{}, err
 		} else {
 			nhr := obj.DeepCopy()
 			pkg.ActiveSIGs.SetHTTPRoute(nhr)
-			if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{nhr}); err != nil {
+			if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{nhr}, []*v1.Service{}); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				pkg.PendingDeploys <- pkg.DeployRequest{

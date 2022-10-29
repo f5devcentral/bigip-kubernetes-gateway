@@ -141,13 +141,13 @@ func reapply(hrs []*gatewayv1beta1.HTTPRoute) (ctrl.Result, error) {
 	if len(hrs) == 0 {
 		return ctrl.Result{}, nil
 	}
-	if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs); err != nil {
+	if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs, []*v1.Service{}); err != nil {
 		return ctrl.Result{}, err
 	} else {
 		bcfgs, _ := json.Marshal(ncfgs)
 		ctrl.Log.V(1).Info(fmt.Sprintf("sending deploy configs: %s", bcfgs))
 		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("upserting svc/eps related by httproutes"),
+			Meta: "upserting svc/eps related by httproutes",
 			From: nil,
 			To:   &ncfgs,
 			StatusFunc: func() {
