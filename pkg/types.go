@@ -27,3 +27,10 @@ type SIGCache struct {
 	Service   map[string]*v1.Service
 	// Node      map[string]*v1.Node
 }
+
+type DepNode struct {
+	Key  string
+	Deps []*DepNode
+}
+
+type DepTrees []*DepNode
