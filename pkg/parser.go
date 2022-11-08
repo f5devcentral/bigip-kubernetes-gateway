@@ -152,32 +152,43 @@ func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) er
 				// TODO: there's at least one field for PATCH. or we may need to fix that
 				// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
 			}
-			svc := ActiveSIGs.GetService(utils.Keyname(ns, string(br.Name)))
-			eps := ActiveSIGs.GetEndpoints(utils.Keyname(ns, string(br.Name)))
-			if svc != nil && eps != nil {
-				if mbs, err := k8s.FormatMembersFromServiceEndpoints(svc, eps); err != nil {
-					return err
-				} else {
-					fmtmbs := []interface{}{}
-
-					for _, mb := range mbs {
-						sep := ":"
-						if utils.IsIpv6(mb.IpAddr) {
-							sep = "."
-						}
-						fmtmbs = append(fmtmbs, map[string]interface{}{
-							"name":    fmt.Sprintf("%s%s%d", mb.IpAddr, sep, mb.TargetPort),
-							"address": mb.IpAddr,
-						})
-					}
-					rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
-
-					// TODO: parse ARP resources for flannel type network.
-				}
+			if fmtmbs, err := parseMembersFrom(ns, string(br.Name)); err == nil {
+				rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
 			}
+
+			// TODO: parse ARP resources for flannel type network.
 		}
 	}
+
+	// TODO: from ExtensionRef as well.
+
 	return nil
+}
+
+func parseMembersFrom(svcNamespace, svcName string) ([]interface{}, error) {
+	svc := ActiveSIGs.GetService(utils.Keyname(svcNamespace, svcName))
+	eps := ActiveSIGs.GetEndpoints(utils.Keyname(svcNamespace, svcName))
+	if svc != nil && eps != nil {
+		if mbs, err := k8s.FormatMembersFromServiceEndpoints(svc, eps); err != nil {
+			return []interface{}{}, err
+		} else {
+			fmtmbs := []interface{}{}
+
+			for _, mb := range mbs {
+				sep := ":"
+				if utils.IsIpv6(mb.IpAddr) {
+					sep = "."
+				}
+				fmtmbs = append(fmtmbs, map[string]interface{}{
+					"name":    fmt.Sprintf("%s%s%d", mb.IpAddr, sep, mb.TargetPort),
+					"address": mb.IpAddr,
+				})
+			}
+			return fmtmbs, nil
+		}
+	} else {
+		return []interface{}{}, nil
+	}
 }
 
 func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
