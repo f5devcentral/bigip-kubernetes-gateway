@@ -136,33 +136,67 @@ func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTT
 }
 
 func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
+
+	creatPool := func(ns, n string, rlt map[string]interface{}) error {
+		name := strings.Join([]string{ns, n}, ".")
+		rlt["ltm/pool/"+name] = map[string]interface{}{
+			"name":    name,
+			"monitor": "min 1 of tcp",
+			"members": []interface{}{},
+
+			// "minActiveMembers": 0,
+			// TODO: there's at least one field for PATCH a pool. or we may need to fix that
+			// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
+		}
+		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
+			return err
+		} else {
+			rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
+		}
+
+		if mon, err := parseMonitorFrom(ns, n); err != nil {
+			return err
+		} else {
+			rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
+		}
+		return nil
+	}
+
 	for _, rl := range hr.Spec.Rules {
 		for _, br := range rl.BackendRefs {
 			ns := hr.Namespace
 			if br.Namespace != nil {
 				ns = string(*br.Namespace)
 			}
-			name := strings.Join([]string{ns, string(br.Name)}, ".")
-			rlt["ltm/pool/"+name] = map[string]interface{}{
-				"name":    name,
-				"monitor": "min 1 of http tcp",
-				"members": []interface{}{},
-
-				// "minActiveMembers": 0,
-				// TODO: there's at least one field for PATCH. or we may need to fix that
-				// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
+			if err := creatPool(ns, string(br.Name), rlt); err != nil {
+				return err
 			}
-			if fmtmbs, err := parseMembersFrom(ns, string(br.Name)); err == nil {
-				rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
-			}
-
 			// TODO: parse ARP resources for flannel type network.
 		}
 	}
 
-	// TODO: from ExtensionRef as well.
+	// pools from ExtensionRef as well.
+	for _, rl := range hr.Spec.Rules {
+		for _, fl := range rl.Filters {
+			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
+				er := fl.ExtensionRef
+				if er.Group != "v1" || er.Kind != "Service" {
+					return fmt.Errorf("resource %s of '%s' not supported", er.Name, utils.Keyname(string(er.Group), string(er.Kind)))
+				} else {
+					if err := creatPool(hr.Namespace, string(er.Name), rlt); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
 
 	return nil
+}
+
+// TODO: find the way to set monitor
+func parseMonitorFrom(svcNamespace, svcName string) (string, error) {
+	return "min 1 of tcp", nil
 }
 
 func parseMembersFrom(svcNamespace, svcName string) ([]interface{}, error) {
