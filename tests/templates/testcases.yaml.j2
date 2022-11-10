@@ -1,0 +1,78 @@
+- name: header matching test
+  context:
+    - gateway
+    - hrs-matches-header
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}
+    headers:
+      Host: {{ hostname }}
+      test: automation
+    method: GET
+    queries:
+  response:
+    status: 200
+    body:
+      uri: /
+      queries: {}
+    headers:
+      Content-Type: text/plain
+
+- name: path matching test
+  context:
+    - gateway
+    - hrs-matches-path
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}/path-test
+    headers:
+      Host: {{ hostname }}
+    method: GET
+    queries:
+  response:
+    status: 200
+    body:
+      uri: /path-test
+      queries: {}
+    headers:
+      Content-Type: text/plain
+
+- name: method matching test
+  context:
+    - gateway
+    - hrs-matches-method
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}
+    headers:
+      Host: {{ hostname }}
+    method: OPTIONS
+    queries:
+  response:
+    status: 200
+    body:
+      uri: /
+      queries: {}
+    headers:
+      Content-Type: text/plain
+
+- name: query matching test
+  context:
+    - gateway
+    - hrs-matches-method
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}
+    headers:
+      Host: {{ hostname }}
+    method: GET
+    queries:
+      test: automation
+  response:
+    status: 200
+    body:
+      uri: /
+      queries: 
+        test: automation
+    headers:
+      Content-Type: text/plain

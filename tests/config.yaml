@@ -1,0 +1,4 @@
+service_type: NodePort
+hostname: gateway.test.automation
+virtual:
+  ipaddr: 10.250.18.119
