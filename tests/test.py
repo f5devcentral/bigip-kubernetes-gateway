@@ -88,6 +88,35 @@ def delete_kube_yaml(name, yaml_file):
     else:
         ok(name, "%s" % str(cp.stdout, 'utf-8'))
 
+def json_is_included_expectedly(expected, given):
+    if type(expected) != type(given):
+        return False
+
+    if type(expected) == type({}):
+        for k, v in expected.items():
+            actual = given.get(k, None)
+            if type(v) != type(actual):
+                return False 
+            if type(v) == type([]):
+                for n in v:
+                    if not n in actual:
+                        return False
+            elif type(v) == type({}):
+                included = json_is_included_expectedly(v, actual)
+                if not included:
+                    return False
+            else:
+                if actual != v:
+                    return False
+    elif type(expected) == type([]):
+        for n in expected:
+            if not n in given:
+                return False
+    else:
+        if expected != given:
+            return False
+    return True
+
 def curl_verify(name, req, expected_resp):
     method = req.get('method', 'GET')
     queries = req.get('queries', {})
@@ -96,32 +125,44 @@ def curl_verify(name, req, expected_resp):
     body = req.get('body', {})
     expected_status = expected_resp.get('status_code', 200)
     expected_headers = expected_resp.get('headers', {}) 
-    expected_body_json = expected_resp.get('body', {})
+    expected_body = expected_resp.get('body', {})
     try:
-        resp = requests.api.request(method=method, url="%s" % url, params=queries, headers=headers, json=body)
-        if resp.status_code != expected_status:
-            fail(name, "Status code unexpected: expected: %d, actually: %d" % (expected_status, resp.status_code))
-        for k, v in expected_headers.items():
-            if resp.headers[k] != v:
-                fail(name, "Header unexpected: expected %s => %s, actually %s => %s" % (k, v, k, resp.headers[k]))
+        warn(name, "requesting: %s" % req)
+        resp = requests.request(method=method, url="%s" % url, params=queries, headers=headers, json=body, allow_redirects=False)
         try:
-            resp_json = resp.json()
+            resp_headers = dict(resp.headers)
+            if type(expected_body) == type({}):
+                resp_body = resp.json()
+            else:
+                resp_body = resp.text
         except Exception as e:
-            fail(name, "Response format unexpected: not json-formated(%s)" % e)
-        if type(expected_body_json) != type(resp_json):
-            fail(name, "Response format unexpected: expected: %s, actually: %s" % (type(expected_body_json), type(resp_json)))
-        if type(expected_body_json) == type([]):
-            for n in expected_body_json:
-                if not n in resp_json:
-                    fail(name, "Response body unexpected, missing %s" % n)
-        elif type(expected_body_json) == type({}):
-            for k, v in expected_body_json.items():
-                if v != resp_json[k]:
-                    fail(name, "Response body unexpected: expected %s => %s, actually %s => %s" % (k, v, k, resp_json[k]))
+            return False, "Response format unexpected: not json-formated(%s)" % e
+
+        if resp.status_code != expected_status:
+            return False, "Status code unexpected: expected: %d, actually: %d" % (expected_status, resp.status_code)
+        if not json_is_included_expectedly(expected_headers, resp_headers):
+            return False, "Header unexpected: expected %s, actually %s " % (expected_headers, resp_headers)
+        
+        if not json_is_included_expectedly(expected_body, resp_body):
+            return False, "Response body unexpected: expected %s, actually %s" % (expected_body, resp_body)
+
     except Exception as e:
-        fail(name, "failed to %s to %s: %s" % (method, url, e))
+        return False, "failed to %s to %s: %s" % (method, url, e)
     else:
-        ok(name, "Successfully verified %s via %s %s" % (name, method, url))
+        return True, "Successfully verified %s via %s %s" % (name, method, url)
+
+
+class test_context():
+    def __init__(self, name, ctx_yamls) -> None:
+        self.ctxs = ctx_yamls
+        self.name = name
+    def __enter__(self):
+        for ctx in self.ctxs:
+            gen_kube_yaml(self.name, ctx)
+            apply_kube_yaml(self.name, '%s/deps/%s.yaml' % (homedir, ctx))
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for ctx in self.ctxs:
+            delete_kube_yaml(self.name, '%s/deps/%s.yaml' % (homedir, ctx))
 
 os.environ.setdefault('KUBE_CONFIG_FILEPATH', '~/.kube/config')
 load_config()
@@ -130,21 +171,17 @@ load_testcases()
 for case in testcases:
     n = case['name']
     note(n, "Testing %s" % n)
-    for ctx in case['context']:
-        gen_kube_yaml(n, ctx)
-        apply_kube_yaml(n, '%s/deps/%s.yaml' % (homedir, ctx))
-
-    retries = 50
-    for t in range(retries):
-        try:
-            curl_verify(n, case['request'], case['response'])
-        except Exception as e:
-            time.sleep(2)
-            warn(n, "Another retry: %d" % (retries-t))
-            if t == retries-1:
-                fail(n, "Timeout for testing... quit.")
-        else:
-            break
-
-    for ctx in case['context']:
-        delete_kube_yaml(n, '%s/deps/%s.yaml' % (homedir, ctx))
+    
+    with test_context(n, case['context']):
+        retries = 50
+        for t in range(retries):
+            (passed, msg)  = curl_verify(n, case['request'], case['response'])
+            if not passed:
+                time.sleep(2)
+                warn(n, msg)
+                warn(n, "Another retry: %d" % (retries-t))
+                if t == retries-1:
+                    fail(n, "Timeout for testing... quit.")
+            else:
+                ok(n, msg)
+                break
