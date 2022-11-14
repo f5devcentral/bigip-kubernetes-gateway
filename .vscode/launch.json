@@ -11,7 +11,8 @@
             "mode": "auto",
             "program": "${workspaceFolder}",
             "args": [
-                "--bigip-url",          "https://10.250.15.180",
+                // "--bigip-url",          "https://10.250.15.180",
+                "--bigip-url",          "https://10.250.18.105:8443",
                 "--bigip-username",     "admin",
                 "--bigip-password",     "P@ssw0rd123"
             ]

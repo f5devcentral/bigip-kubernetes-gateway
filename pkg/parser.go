@@ -159,6 +159,13 @@ func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) er
 		} else {
 			rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
 		}
+
+		if err := parseArpsFrom(ns, n, rlt); err != nil {
+			return err
+		}
+		if err := parseNodesFrom(ns, n, rlt); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -171,7 +178,6 @@ func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) er
 			if err := creatPool(ns, string(br.Name), rlt); err != nil {
 				return err
 			}
-			// TODO: parse ARP resources for flannel type network.
 		}
 	}
 
@@ -223,6 +229,50 @@ func parseMembersFrom(svcNamespace, svcName string) ([]interface{}, error) {
 	} else {
 		return []interface{}{}, nil
 	}
+}
+
+func parseArpsFrom(svcNamespace, svcName string, rlt map[string]interface{}) error {
+	svc := ActiveSIGs.GetService(utils.Keyname(svcNamespace, svcName))
+	eps := ActiveSIGs.GetEndpoints(utils.Keyname(svcNamespace, svcName))
+	if svc != nil && eps != nil {
+		if mbs, err := k8s.FormatMembersFromServiceEndpoints(svc, eps); err != nil {
+			return err
+		} else {
+			prefix := "k8s-"
+			for _, mb := range mbs {
+				if mb.MacAddr != "" {
+					rlt["net/arp/"+prefix+mb.IpAddr] = map[string]interface{}{
+						"name":       prefix + mb.IpAddr,
+						"ipAddress":  mb.IpAddr,
+						"macAddress": mb.MacAddr,
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) error {
+	svc := ActiveSIGs.GetService(utils.Keyname(svcNamespace, svcName))
+	eps := ActiveSIGs.GetEndpoints(utils.Keyname(svcNamespace, svcName))
+	if svc != nil && eps != nil {
+		if mbs, err := k8s.FormatMembersFromServiceEndpoints(svc, eps); err != nil {
+			return err
+		} else {
+			for _, mb := range mbs {
+				if mb.MacAddr != "" {
+					rlt["ltm/node/"+mb.IpAddr] = map[string]interface{}{
+						"name":    mb.IpAddr,
+						"address": mb.IpAddr,
+						"monitor": "default",
+						"session": "user-enabled",
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
