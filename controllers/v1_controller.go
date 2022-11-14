@@ -18,14 +18,15 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "k8s.io/api/core/v1"
 
@@ -51,46 +52,78 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	var obj v1.Endpoints
 	// zlog := log.FromContext(ctx)
-	// zlog.V(1).Info("resource event: " + req.NamespacedName.String())
+	// // too many logs.
+	// zlog.V(1).Info("endpoint event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
+			ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc})
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 			hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
 			pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
-
-			return reapply(hrs)
+			ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs, []*v1.Service{})
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			applyCfgs(ocfgs, ncfgs)
+			return ctrl.Result{}, nil
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
-		cpObj := obj.DeepCopy()
-		pkg.ActiveSIGs.SetEndpoints(cpObj)
 		svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-		hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
-		return reapply(hrs)
+		ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		pkg.ActiveSIGs.SetEndpoints(obj.DeepCopy())
+		ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		applyCfgs(ocfgs, ncfgs)
+		return ctrl.Result{}, nil
 	}
 }
 
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
 	var obj v1.Service
-	// zlog := log.FromContext(ctx)
-	// zlog.V(1).Info("resource event: " + req.NamespacedName.String())
+	zlog := log.FromContext(ctx)
+	zlog.V(1).Info("Service event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
+			ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc})
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 			hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
 			pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
-			return reapply(hrs)
+			ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs, []*v1.Service{})
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			applyCfgs(ocfgs, ncfgs)
+			return ctrl.Result{}, nil
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
-		cpObj := obj.DeepCopy()
-		pkg.ActiveSIGs.SetService(cpObj)
 		svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-		hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
-		return reapply(hrs)
+		ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		pkg.ActiveSIGs.SetService(obj.DeepCopy())
+		ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		applyCfgs(ocfgs, ncfgs)
+		return ctrl.Result{}, nil
 	}
 }
 
@@ -136,24 +169,16 @@ func SetupReconcilerForCoreV1WithManager(mgr ctrl.Manager) error {
 	}
 }
 
-func reapply(hrs []*gatewayv1beta1.HTTPRoute) (ctrl.Result, error) {
-
-	if len(hrs) == 0 {
-		return ctrl.Result{}, nil
+func applyCfgs(ocfgs, ncfgs map[string]interface{}) {
+	if reflect.DeepEqual(ocfgs, ncfgs) {
+		return
 	}
-	if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs, []*v1.Service{}); err != nil {
-		return ctrl.Result{}, err
-	} else {
-		bcfgs, _ := json.Marshal(ncfgs)
-		ctrl.Log.V(1).Info(fmt.Sprintf("sending deploy configs: %s", bcfgs))
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: "upserting svc/eps related by httproutes",
-			From: nil,
-			To:   &ncfgs,
-			StatusFunc: func() {
-				// do something
-			},
-		}
-		return ctrl.Result{}, nil
+	pkg.PendingDeploys <- pkg.DeployRequest{
+		Meta: "upserting svc/eps",
+		From: &ocfgs,
+		To:   &ncfgs,
+		StatusFunc: func() {
+			// do something
+		},
 	}
 }
