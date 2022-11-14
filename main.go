@@ -135,6 +135,14 @@ func main() {
 	stopCh := make(chan struct{})
 	go pkg.Deployer(stopCh, bigip)
 
+	if err := (&controllers.GatewayClassReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GatewayClass")
+		os.Exit(1)
+	}
+
 	if err := (&controllers.GatewayReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
