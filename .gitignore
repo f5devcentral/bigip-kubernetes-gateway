@@ -26,3 +26,4 @@ Dockerfile.cross
 *~
 vendor
 __debug_bin
+bigip-kubernetes-gateway-controller-*

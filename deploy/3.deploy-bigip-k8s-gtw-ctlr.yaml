@@ -1,0 +1,74 @@
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bigip-kubernetes-gateway
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bigip-kubernetes-gateway-pod
+  template:
+    metadata:
+      name: bigip-kubernetes-gateway-pod
+      labels:
+        app: bigip-kubernetes-gateway-pod
+    spec:
+      serviceAccountName: k8s-bigip-ctlr
+      nodeSelector:
+        node-role.kubernetes.io/controlplane: "true"
+        # node-role.kubernetes.io/master: "true"
+      containers:
+        # kubectl logs -f deployment/bigip-kubernetes-gateway -c bigip-kubernetes-gateway-pod -n kube-system
+        - name: bigip-kubernetes-gateway-pod
+          image: zongzw/bigip-kubernetes-gateway:latest-20221115-162758
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: BIGIP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: bigip-login
+                  key: username
+            - name: BIGIP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bigip-login
+                  key: password
+            - name: BIGIP_URL
+              valueFrom:
+                secretKeyRef:
+                  name: bigip-login
+                  key: url
+          command: ["/bigip-kubernetes-gateway-controller-linux"]
+          args: [
+            "--bigip-username=$(BIGIP_USERNAME)",
+            "--bigip-password=$(BIGIP_PASSWORD)",
+            "--bigip-url=$(BIGIP_URL)",
+            "--gateway-class=bigip"
+          ]
+
+---
+
+# expose the Prometheus port with NodePort
+apiVersion: v1
+kind: Service
+metadata:
+  name: bigip-kubernetes-gateway-svc
+  namespace: kube-system
+spec:
+  selector:
+    app: bigip-kubernetes-gateway-pod
+  ports:
+    - name: bigip-kubernetes-gateway-metrics
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080
+    - name: bigip-kubernetes-gateway-health
+      protocol: TCP
+      port: 8081
+      targetPort: 8081
+      nodePort: 30081
+  type: NodePort
