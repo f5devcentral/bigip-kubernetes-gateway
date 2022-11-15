@@ -377,9 +377,9 @@ func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) e
 					}
 
 					// experimental .. definition is not clear yet.
-					setPath := `set rpath "[HTTP::path]"`
+					setUri := `set ruri "[HTTP::uri]"`
 					if rr.Path != nil && rr.Path.ReplaceFullPath != nil {
-						setPath = fmt.Sprintf(`set rpath "%s"`, *rr.Path.ReplaceFullPath)
+						setUri = fmt.Sprintf(`set ruri "%s"`, *rr.Path.ReplaceFullPath)
 					}
 
 					setPort := `set rport [TCP::local_port]`
@@ -397,10 +397,10 @@ func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) e
 						%s
 						%s
 						%s
-						set uri $rscheme://$rhostname:$rport$rpath?[HTTP::query]
-						log local0. "request redirect to $uri"
-						HTTP::respond %d Location $uri
-					`, setScheme, setHostName, setPath, setPort, *rr.StatusCode))
+						set url $rscheme://$rhostname:$rport$ruri
+						log local0. "request redirect to $url"
+						HTTP::respond %d Location $url
+					`, setScheme, setHostName, setUri, setPort, *rr.StatusCode))
 				}
 			// <gateway:experimental>
 			case gatewayv1beta1.HTTPRouteFilterURLRewrite:
