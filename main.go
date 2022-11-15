@@ -64,12 +64,15 @@ func init() {
 // 531  kubebuilder create api --group gateways --version v1 --kind Adc
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	var bigipUrl string
-	var bigipUsername string
-	var bigipPassword string
+	var (
+		metricsAddr          string
+		enableLeaderElection bool
+		probeAddr            string
+		bigipUrl             string
+		bigipUsername        string
+		bigipPassword        string
+		gtcName              string
+	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -80,6 +83,7 @@ func main() {
 	flag.StringVar(&bigipUrl, "bigip-url", "", "The BIG-IP management IP address for provision resources.")
 	flag.StringVar(&bigipUsername, "bigip-username", "admin", "The BIG-IP username for connection.")
 	flag.StringVar(&bigipPassword, "bigip-password", "", "The BI-IP password for connection.")
+	flag.StringVar(&gtcName, "gateway-class", "bigip", "The BI-IP password for connection.")
 
 	opts := zap.Options{
 		Development: true,
@@ -87,6 +91,7 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	pkg.ActiveSIGs.GatewayClass = gtcName
 	bigip := f5_bigip.Initialize(bigipUrl, bigipUsername, bigipPassword, "debug")
 	utils.Initialize("debug")
 

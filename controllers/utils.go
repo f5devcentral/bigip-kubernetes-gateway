@@ -35,6 +35,9 @@ func syncGatewaysAtStart(r *GatewayReconciler, ctx context.Context) error {
 		return fmt.Errorf("unable to list gateways: %s", err.Error())
 	} else {
 		for _, gw := range gws.Items {
+			if gw.Spec.GatewayClassName != gatewayv1beta1.ObjectName(pkg.ActiveSIGs.GatewayClass) {
+				continue
+			}
 			zlog.V(1).Info("found gw: " + utils.Keyname(gw.Namespace, gw.Name))
 			pkg.ActiveSIGs.SetGateway(gw.DeepCopy())
 		}

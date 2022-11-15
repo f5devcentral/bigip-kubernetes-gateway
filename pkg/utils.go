@@ -18,11 +18,12 @@ func init() {
 	PendingParses = make(chan ParseRequest, 16)
 	slog = utils.SetupLog("", "debug")
 	ActiveSIGs = &SIGCache{
-		mutex:     sync.RWMutex{},
-		Gateway:   map[string]*gatewayv1beta1.Gateway{},
-		HTTPRoute: map[string]*gatewayv1beta1.HTTPRoute{},
-		Endpoints: map[string]*v1.Endpoints{},
-		Service:   map[string]*v1.Service{},
+		mutex:        sync.RWMutex{},
+		GatewayClass: "",
+		Gateway:      map[string]*gatewayv1beta1.Gateway{},
+		HTTPRoute:    map[string]*gatewayv1beta1.HTTPRoute{},
+		Endpoints:    map[string]*v1.Endpoints{},
+		Service:      map[string]*v1.Service{},
 		// Node:      map[string]*v1.Node{},
 	}
 }
@@ -32,7 +33,12 @@ func (c *SIGCache) SetGateway(obj *gatewayv1beta1.Gateway) {
 	defer c.mutex.Unlock()
 
 	if obj != nil {
-		c.Gateway[utils.Keyname(obj.Namespace, obj.Name)] = obj
+		keyname := utils.Keyname(obj.Namespace, obj.Name)
+		if obj.Spec.GatewayClassName == gatewayv1beta1.ObjectName(c.GatewayClass) {
+			c.Gateway[keyname] = obj
+		} else {
+			delete(c.Gateway, keyname)
+		}
 	}
 }
 
