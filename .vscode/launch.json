@@ -5,15 +5,26 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch Package",
+            "name": "Python: test automation",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/tests/test.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "GO: Launch Program",
             "type": "go",
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}",
             "args": [
-                "--bigip-url",          "https://10.250.15.180",
-                "--bigip-username",     "admin",
-                "--bigip-password",     "P@ssw0rd123"
+                "--bigip-url",
+                "https://10.250.15.180",
+                "--bigip-username",
+                "admin",
+                "--bigip-password",
+                "P@ssw0rd123"
             ]
         }
     ]

@@ -1,0 +1,130 @@
+- name: header matching test
+  context:
+    - gateway
+    - hrs-matches-header
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}
+    headers:
+      Host: {{ hostname }}
+      test: automation
+    method: GET
+    queries:
+  response:
+    status_code: 200
+    body:
+      uri: /
+      queries: {}
+    headers:
+      Content-Type: text/plain
+
+- name: path matching test
+  context:
+    - gateway
+    - hrs-matches-path
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}/path-test
+    headers:
+      Host: {{ hostname }}
+    method: GET
+    queries:
+  response:
+    status_code: 200
+    body:
+      uri: /path-test
+      queries: {}
+    headers:
+      Content-Type: text/plain
+
+- name: method matching test
+  context:
+    - gateway
+    - hrs-matches-method
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}
+    headers:
+      Host: {{ hostname }}
+    method: OPTIONS
+    queries:
+  response:
+    status_code: 200
+    body:
+      uri: /
+      queries: {}
+    headers:
+      Content-Type: text/plain
+
+- name: query matching test
+  context:
+    - gateway
+    - hrs-matches-method
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}
+    headers:
+      Host: {{ hostname }}
+    method: GET
+    queries:
+      test: automation
+  response:
+    status_code: 200
+    body:
+      uri: /
+      queries: 
+        test: automation
+    headers:
+      Content-Type: text/plain #}
+
+- name: header filter test
+  context:
+    - gateway
+    - hrs-filters-header
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}
+    headers:
+      Host: {{ hostname }}
+    method: GET
+  response:
+    status_code: 200
+    body:
+      uri: /
+      headers:
+        Host: {{ hostname }}
+        test: automation
+        dev: agile
+    headers:
+      Content-Type: text/plain
+
+- name: request-redirect filter test
+  context:
+    - gateway
+    - hrs-filters-request-redirect
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}
+    headers:
+      Host: {{ hostname }}
+    method: GET
+  response:
+    status_code: 301
+    headers:
+      Location: https://www.example.com:443/
+    body: ""
+
+- name: extension-ref filter test
+  context:
+    - gateway
+    - hrs-filters-extensionref
+    - service
+  request:
+    url: http://{{ virtual.ipaddr }}
+    headers:
+      Host: {{ hostname }}
+    method: GET
+  response:
+    status_code: 200
+    body:
+      uri: /
