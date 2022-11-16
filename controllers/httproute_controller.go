@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	v1 "k8s.io/api/core/v1"
@@ -49,12 +48,12 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	zlog := log.FromContext(ctx)
 
 	var obj gatewayv1beta1.HTTPRoute
-	if err := syncHTTPRouteAtStart(r, ctx); err != nil {
-		zlog.Error(err, "failed to sync httproutes")
-		os.Exit(1)
-	} else if syncHTTPRoute != synced {
-		return ctrl.Result{Requeue: true}, nil
-	}
+	// if err := syncHTTPRouteAtStart(r, ctx); err != nil {
+	// 	zlog.Error(err, "failed to sync httproutes")
+	// 	os.Exit(1)
+	// } else if syncHTTPRoute != synced {
+	// 	return ctrl.Result{Requeue: true}, nil
+	// }
 
 	zlog.V(1).Info("handling " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
@@ -113,6 +112,11 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *HttpRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// // {"error": "the cache is not started, can not read objects"}
+	// var hrList gatewayv1beta1.HTTPRouteList
+	// if err := r.List(context.TODO(), &hrList, &client.ListOptions{}); err != nil {
+	// 	ctrl.Log.Error(err, "failed to list hrs")
+	// }
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&gatewayv1beta1.HTTPRoute{}).
 		Complete(r)
