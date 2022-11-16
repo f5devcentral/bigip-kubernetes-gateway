@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	gatewaysv1 "gitee.com/zongzw/bigip-kubernetes-gateway/api/v1"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/controllers"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
@@ -53,10 +52,6 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	utilruntime.Must(gatewaysv1.AddToScheme(scheme))
-	//+kubebuilder:scaffold:scheme
-
 	utilruntime.Must(gatewayv1beta1.AddToScheme(scheme))
 }
 
