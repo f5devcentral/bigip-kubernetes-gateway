@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	v1 "k8s.io/api/core/v1"
@@ -46,14 +47,12 @@ type HttpRouteReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	zlog := log.FromContext(ctx)
+	if !pkg.ActiveSIGs.SyncedAtStart {
+		<-time.After(100 * time.Millisecond)
+		return ctrl.Result{Requeue: true}, nil
+	}
 
 	var obj gatewayv1beta1.HTTPRoute
-	// if err := syncHTTPRouteAtStart(r, ctx); err != nil {
-	// 	zlog.Error(err, "failed to sync httproutes")
-	// 	os.Exit(1)
-	// } else if syncHTTPRoute != synced {
-	// 	return ctrl.Result{Requeue: true}, nil
-	// }
 
 	zlog.V(1).Info("handling " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {

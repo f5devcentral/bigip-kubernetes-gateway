@@ -2,12 +2,18 @@ package pkg
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"sync"
+	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,12 +24,13 @@ func init() {
 	PendingParses = make(chan ParseRequest, 16)
 	slog = utils.SetupLog("", "debug")
 	ActiveSIGs = &SIGCache{
-		mutex:        sync.RWMutex{},
-		GatewayClass: "",
-		Gateway:      map[string]*gatewayv1beta1.Gateway{},
-		HTTPRoute:    map[string]*gatewayv1beta1.HTTPRoute{},
-		Endpoints:    map[string]*v1.Endpoints{},
-		Service:      map[string]*v1.Service{},
+		mutex:         sync.RWMutex{},
+		SyncedAtStart: false,
+		GatewayClass:  "",
+		Gateway:       map[string]*gatewayv1beta1.Gateway{},
+		HTTPRoute:     map[string]*gatewayv1beta1.HTTPRoute{},
+		Endpoints:     map[string]*v1.Endpoints{},
+		Service:       map[string]*v1.Service{},
 		// Node:      map[string]*v1.Node{},
 	}
 }
@@ -376,11 +383,8 @@ func (c *SIGCache) _getRelatedObjs(
 	}
 }
 
-func (c *SIGCache) SyncCoreV1Resources(kubeClient kubernetes.Interface) error {
+func (c *SIGCache) syncCoreV1Resources(kubeClient kubernetes.Interface) error {
 	defer utils.TimeItToPrometheus()()
-
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
 
 	if epsList, err := kubeClient.CoreV1().Endpoints(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
 		return err
@@ -407,5 +411,75 @@ func (c *SIGCache) SyncCoreV1Resources(kubeClient kubernetes.Interface) error {
 			k8s.NodeCache.Set(&n)
 		}
 	}
+	return nil
+}
+
+func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
+	defer utils.TimeItToPrometheus()()
+
+	checkAndWaitCacheStarted := func() error {
+		var gtwList gatewayv1beta1.GatewayList
+		for {
+			if err := mgr.GetCache().List(context.TODO(), &gtwList, &client.ListOptions{}); err != nil {
+				if reflect.DeepEqual(err, &cache.ErrCacheNotStarted{}) {
+					slog.Debugf("Waiting for mgr cache to be ready.")
+					<-time.After(100 * time.Millisecond)
+				} else {
+					return fmt.Errorf("failed to accessing mgr's cache: %s", err.Error())
+				}
+			} else {
+				slog.Debugf("mgr cache is ready for syncing resources")
+				break
+			}
+		}
+		return nil
+	}
+
+	if err := checkAndWaitCacheStarted(); err != nil {
+		panic(err)
+	}
+
+	slog.Infof("starting to sync resources")
+	var gtwList gatewayv1beta1.GatewayList
+	var hrList gatewayv1beta1.HTTPRouteList
+
+	if err := mgr.GetCache().List(context.TODO(), &gtwList, &client.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, gw := range gtwList.Items {
+			slog.Debugf("found gateway %s", utils.Keyname(gw.Namespace, gw.Name))
+			c.Gateway[utils.Keyname(gw.Namespace, gw.Name)] = gw.DeepCopy()
+		}
+	}
+	if err := mgr.GetCache().List(context.TODO(), &hrList, &client.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, hr := range hrList.Items {
+			slog.Debugf("found httproute %s", utils.Keyname(hr.Namespace, hr.Name))
+			c.HTTPRoute[utils.Keyname(hr.Namespace, hr.Name)] = hr.DeepCopy()
+		}
+	}
+	return nil
+}
+
+func (c *SIGCache) SyncAllResources(mgr manager.Manager) error {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig()); err != nil {
+		panic(fmt.Errorf("unable to create kubeclient: %s", err.Error()))
+	} else {
+		if err := c.syncCoreV1Resources(kubeClient); err != nil {
+			panic(fmt.Errorf("unable to sync k8s corev1 resources to local: %s", err.Error()))
+		}
+	}
+
+	if err := c.syncGatewayResources(mgr); err != nil {
+		panic(err)
+	}
+
+	c.SyncedAtStart = true
 	return nil
 }

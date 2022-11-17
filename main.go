@@ -25,7 +25,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -122,16 +121,6 @@ func main() {
 
 	mgr.AddMetricsExtraHandler("/stats", promhttp.Handler())
 
-	if kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig()); err != nil {
-		setupLog.Error(err, "unable to create kubeclient: %s", err.Error())
-		os.Exit(1)
-	} else {
-		if err := pkg.ActiveSIGs.SyncCoreV1Resources(kubeClient); err != nil {
-			setupLog.Error(err, "unable to sync k8s resources to local: %s", err.Error())
-			os.Exit(1)
-		}
-	}
-
 	stopCh := make(chan struct{})
 	go pkg.Deployer(stopCh, bigip)
 
@@ -163,6 +152,8 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+
+	go pkg.ActiveSIGs.SyncAllResources(mgr)
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

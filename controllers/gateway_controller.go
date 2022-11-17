@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,13 +49,12 @@ type GatewayReconciler struct {
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	zlog := log.FromContext(ctx)
 
+	if !pkg.ActiveSIGs.SyncedAtStart {
+		<-time.After(100 * time.Millisecond)
+		return ctrl.Result{Requeue: true}, nil
+	}
 	var obj gatewayv1beta1.Gateway
-	// if err := syncGatewaysAtStart(r, ctx); err != nil {
-	// 	zlog.Error(err, "failed to sync gateways")
-	// 	os.Exit(1)
-	// } else if syncGateway != synced {
-	// 	return ctrl.Result{Requeue: true}, nil
-	// }
+
 	zlog.V(1).Info("handling " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {

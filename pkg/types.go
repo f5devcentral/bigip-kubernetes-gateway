@@ -20,12 +20,13 @@ type ParseRequest struct {
 }
 
 type SIGCache struct {
-	mutex        sync.RWMutex
-	GatewayClass string
-	Gateway      map[string]*gatewayv1beta1.Gateway
-	HTTPRoute    map[string]*gatewayv1beta1.HTTPRoute
-	Endpoints    map[string]*v1.Endpoints
-	Service      map[string]*v1.Service
+	mutex         sync.RWMutex
+	SyncedAtStart bool
+	GatewayClass  string
+	Gateway       map[string]*gatewayv1beta1.Gateway
+	HTTPRoute     map[string]*gatewayv1beta1.HTTPRoute
+	Endpoints     map[string]*v1.Endpoints
+	Service       map[string]*v1.Service
 	// Node      map[string]*v1.Node
 }
 
