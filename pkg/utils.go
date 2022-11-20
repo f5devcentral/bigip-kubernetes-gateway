@@ -24,15 +24,40 @@ func init() {
 	PendingParses = make(chan ParseRequest, 16)
 	slog = utils.SetupLog("", "debug")
 	ActiveSIGs = &SIGCache{
-		mutex:         sync.RWMutex{},
-		SyncedAtStart: false,
-		GatewayClass:  "",
-		Gateway:       map[string]*gatewayv1beta1.Gateway{},
-		HTTPRoute:     map[string]*gatewayv1beta1.HTTPRoute{},
-		Endpoints:     map[string]*v1.Endpoints{},
-		Service:       map[string]*v1.Service{},
+		mutex:          sync.RWMutex{},
+		SyncedAtStart:  false,
+		ControllerName: "",
+		Gateway:        map[string]*gatewayv1beta1.Gateway{},
+		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
+		Endpoints:      map[string]*v1.Endpoints{},
+		Service:        map[string]*v1.Service{},
+		GatewayClasses: map[string]*gatewayv1beta1.GatewayClass{},
+		Bigip:          nil,
 		// Node:      map[string]*v1.Node{},
 	}
+}
+
+func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if obj != nil {
+		c.GatewayClasses[utils.Keyname(obj.Namespace, obj.Name)] = obj
+	}
+}
+
+func (c *SIGCache) UnsetGatewayClass(keyname string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	delete(c.GatewayClasses, keyname)
+}
+
+func (c *SIGCache) GetGatewayClass(keyname string) *gatewayv1beta1.GatewayClass {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.GatewayClasses[keyname]
 }
 
 func (c *SIGCache) SetGateway(obj *gatewayv1beta1.Gateway) {
@@ -41,7 +66,8 @@ func (c *SIGCache) SetGateway(obj *gatewayv1beta1.Gateway) {
 
 	if obj != nil {
 		keyname := utils.Keyname(obj.Namespace, obj.Name)
-		if obj.Spec.GatewayClassName == gatewayv1beta1.ObjectName(c.GatewayClass) {
+		if _, f := c.GatewayClasses[string(obj.Spec.GatewayClassName)]; f {
+			slog.Debugf("set this gw %s", keyname)
 			c.Gateway[keyname] = obj
 		} else {
 			delete(c.Gateway, keyname)
@@ -440,15 +466,34 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	}
 
 	slog.Infof("starting to sync resources")
+	var gwcList gatewayv1beta1.GatewayClassList
 	var gtwList gatewayv1beta1.GatewayList
 	var hrList gatewayv1beta1.HTTPRouteList
+
+	if err := mgr.GetCache().List(context.TODO(), &gwcList, &client.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, gwc := range gwcList.Items {
+			if gwc.Spec.ControllerName == gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
+				slog.Infof("found gatewayclass %s", utils.Keyname(gwc.Namespace, gwc.Name))
+				c.GatewayClasses[utils.Keyname(gwc.Namespace, gwc.Name)] = gwc.DeepCopy()
+			} else {
+				slog.Infof("This gwc's ControllerName %s not equal to this controller. Ignore.", gwc.Spec.ControllerName)
+			}
+		}
+	}
 
 	if err := mgr.GetCache().List(context.TODO(), &gtwList, &client.ListOptions{}); err != nil {
 		return err
 	} else {
 		for _, gw := range gtwList.Items {
-			slog.Debugf("found gateway %s", utils.Keyname(gw.Namespace, gw.Name))
-			c.Gateway[utils.Keyname(gw.Namespace, gw.Name)] = gw.DeepCopy()
+			if _, f := c.GatewayClasses[string(gw.Spec.GatewayClassName)]; f {
+				slog.Debugf("found gateway %s", utils.Keyname(gw.Namespace, gw.Name))
+				c.Gateway[utils.Keyname(gw.Namespace, gw.Name)] = gw.DeepCopy()
+			} else {
+				slog.Infof("This gw's GatewayClassName %s not belong to this controller. Ignore.", gw.Spec.GatewayClassName)
+				delete(c.Gateway, utils.Keyname(gw.Namespace, gw.Name))
+			}
 		}
 	}
 	if err := mgr.GetCache().List(context.TODO(), &hrList, &client.ListOptions{}); err != nil {

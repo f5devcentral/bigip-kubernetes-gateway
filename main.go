@@ -18,7 +18,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io/ioutil"
+	"net/url"
 	"os"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -65,7 +69,8 @@ func main() {
 		bigipUrl             string
 		bigipUsername        string
 		bigipPassword        string
-		gtcName              string
+		credsDir             string
+		controllerName       string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -77,7 +82,9 @@ func main() {
 	flag.StringVar(&bigipUrl, "bigip-url", "", "The BIG-IP management IP address for provision resources.")
 	flag.StringVar(&bigipUsername, "bigip-username", "admin", "The BIG-IP username for connection.")
 	flag.StringVar(&bigipPassword, "bigip-password", "", "The BI-IP password for connection.")
-	flag.StringVar(&gtcName, "gateway-class", "bigip", "The BI-IP password for connection.")
+	flag.StringVar(&credsDir, "credentials-directory", "", "Optional, directory that contains the BIG-IP username,"+
+		"password, and/or url files. To be used instead of username, password, and/or url arguments.")
+	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
 
 	opts := zap.Options{
 		Development: true,
@@ -85,9 +92,23 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	pkg.ActiveSIGs.GatewayClass = gtcName
+	pkg.ActiveSIGs.ControllerName = controllerName
+
+	if (len(bigipUrl) == 0 || len(bigipUsername) == 0 ||
+		len(bigipPassword) == 0) && len(credsDir) == 0 {
+		err := fmt.Errorf("Missing BIG-IP credentials info.")
+		setupLog.Error(err, "Missing BIG-IP credentials info: %s", err.Error())
+		panic(err)
+	}
+
+	if err := getCredentials(bigipUrl, bigipUsername, bigipPassword, credsDir); err != nil {
+		panic(err)
+	}
+
 	bigip := f5_bigip.Initialize(bigipUrl, bigipUsername, bigipPassword, "debug")
 	utils.Initialize("debug")
+
+	pkg.ActiveSIGs.Bigip = bigip
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -169,4 +190,60 @@ func main() {
 		os.Exit(1)
 	}
 
+}
+
+func getCredentials(bigipUrl, bigipUsername, bigipPassword, credsDir string) error {
+	if len(credsDir) > 0 {
+		var usr, pass, url string
+		var err error
+		if strings.HasSuffix(credsDir, "/") {
+			usr = credsDir + "username"
+			pass = credsDir + "password"
+			url = credsDir + "url"
+		} else {
+			usr = credsDir + "/username"
+			pass = credsDir + "/password"
+			url = credsDir + "/url"
+		}
+
+		setField := func(field *string, filename, fieldType string) error {
+			fileBytes, readErr := ioutil.ReadFile(filename)
+			if readErr != nil {
+				setupLog.Info(fmt.Sprintf(
+					"No %s in credentials directory, falling back to CLI argument", fieldType))
+				if len(*field) == 0 {
+					return fmt.Errorf(fmt.Sprintf("BIG-IP %s not specified", fieldType))
+				}
+			} else {
+				*field = strings.TrimSpace(string(fileBytes))
+			}
+			return nil
+		}
+
+		err = setField(&bigipUsername, usr, "username")
+		if err != nil {
+			return err
+		}
+		err = setField(&bigipPassword, pass, "password")
+		if err != nil {
+			return err
+		}
+		err = setField(&bigipUrl, url, "url")
+		if err != nil {
+			return err
+		}
+	}
+	// Verify URL is valid
+	if !strings.HasPrefix(bigipUrl, "https://") {
+		bigipUrl = "https://" + bigipUrl
+	}
+	u, err := url.Parse(bigipUrl)
+	if nil != err {
+		return fmt.Errorf("Error parsing url: %s", err)
+	}
+	if len(u.Path) > 0 && u.Path != "/" {
+		return fmt.Errorf("BIGIP-URL path must be empty or '/'; check URL formatting and/or remove %s from path",
+			u.Path)
+	}
+	return nil
 }
