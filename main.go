@@ -136,7 +136,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	prometheus.MustRegister(utils.FunctionDurationTimeCost)
+	prometheus.MustRegister(utils.FunctionDurationTimeCostCount)
+	prometheus.MustRegister(utils.FunctionDurationTimeCostTotal)
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostCount)
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostTotal)
 

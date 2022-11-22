@@ -178,6 +178,29 @@ func (c *SIGCache) UnsetService(keyname string) {
 // 	return ips
 // }
 
+func (c *SIGCache) AttachedGateways(gtw *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c._attachedGateways(gtw)
+}
+
+func (c *SIGCache) _attachedGateways(gwc *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
+	if gwc == nil {
+		return []*gatewayv1beta1.Gateway{}
+	}
+
+	gws := []*gatewayv1beta1.Gateway{}
+	for _, gw := range c.Gateway {
+		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(gwc.Name) {
+			gws = append(gws, gw)
+		}
+	}
+	return gws
+}
+
 func (c *SIGCache) GatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
@@ -264,7 +287,7 @@ func (c *SIGCache) _serviceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
 		for _, fl := range rl.Filters {
 			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
 				er := fl.ExtensionRef
-				if er.Group == "v1" && er.Kind == "Service" {
+				if er.Group == "" && er.Kind == "Service" {
 					if svc, ok := c.Service[utils.Keyname(hr.Namespace, string(er.Name))]; ok {
 						svcs = append(svcs, svc)
 					}
@@ -305,7 +328,7 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 			for _, fl := range rl.Filters {
 				if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
 					er := fl.ExtensionRef
-					if er.Group == "v1" && er.Kind == "Service" {
+					if er.Group == "" && er.Kind == "Service" {
 						if utils.Keyname(hr.Namespace, string(er.Name)) == utils.Keyname(svc.Namespace, svc.Name) {
 							return true
 						}

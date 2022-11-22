@@ -186,7 +186,7 @@ func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) er
 		for _, fl := range rl.Filters {
 			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
 				er := fl.ExtensionRef
-				if er.Group != "v1" || er.Kind != "Service" {
+				if er.Group != "" || er.Kind != "Service" {
 					return fmt.Errorf("resource %s of '%s' not supported", er.Name, utils.Keyname(string(er.Group), string(er.Kind)))
 				} else {
 					if err := creatPool(hr.Namespace, string(er.Name), rlt); err != nil {

@@ -18,10 +18,12 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
-	corev1 "k8s.io/api/core/v1"
+	"gitee.com/zongzw/f5-bigip-rest/utils"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,9 +59,22 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	zlog.V(1).Info("is handling " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			// seems safe to unset even if this deleted gwc is not controlled by this controller
-			zlog.V(1).Info("just unset or ignored " + req.NamespacedName.String())
-			pkg.ActiveSIGs.UnsetGatewayClass(req.NamespacedName.String())
+			if gwc := pkg.ActiveSIGs.GetGatewayClass(req.NamespacedName.String()); gwc != nil {
+				gws := pkg.ActiveSIGs.AttachedGateways(gwc)
+				if ocfgs, err := pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
+					return ctrl.Result{}, err
+				} else {
+					pkg.PendingDeploys <- pkg.DeployRequest{
+						Meta: fmt.Sprintf("clearing gateways for gatewayclass '%s'", req.NamespacedName.String()),
+						From: &ocfgs,
+						To:   nil,
+						StatusFunc: func() {
+							pkg.ActiveSIGs.UnsetGatewayClass(req.NamespacedName.String())
+						},
+						Partition: req.NamespacedName.String(),
+					}
+				}
+			}
 			return ctrl.Result{}, nil
 		} else {
 			return ctrl.Result{}, err
@@ -67,7 +82,6 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	} else {
 		// upsert gatewayclass
 		zlog.V(1).Info("upserting " + req.NamespacedName.String())
-
 		ngwc := obj.DeepCopy()
 
 		if ngwc.Spec.ControllerName != gatewayv1beta1.GatewayController(pkg.ActiveSIGs.ControllerName) {
@@ -75,42 +89,33 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, nil
 		}
 
-		// ogwc := pkg.ActiveSIGs.GetGatewayClass(req.NamespacedName.String())
-		pkg.ActiveSIGs.SetGatewayClass(ngwc)
+		ogwc := pkg.ActiveSIGs.GetGatewayClass(req.NamespacedName.String())
 
+		ocfgs := map[string]interface{}{}
+		ncfgs := map[string]interface{}{}
+		var err error
+		if ogwc != nil {
+			gws := pkg.ActiveSIGs.AttachedGateways(ogwc)
+			if ocfgs, err = pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		pkg.ActiveSIGs.SetGatewayClass(ngwc)
+		gws := pkg.ActiveSIGs.AttachedGateways(ngwc)
+		if ncfgs, err = pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
+			return ctrl.Result{}, err
+		}
 		// TODO: add logic more here. but don't want to compare configmap modifications and execute each time?
 		// create partiton in the bigip here since we consider gwc name to be partiton name
-		if ngwc.Spec.ParametersRef == nil {
-			ngwc.Status.Conditions = []metav1.Condition{
-				{
-					Type:               "Accepted",
-					Status:             metav1.ConditionTrue,
-					Reason:             string(gatewayv1beta1.GatewayClassReasonAccepted),
-					Message:            "Accepted message",
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				},
-			}
-
-			if err := r.Status().Update(ctx, ngwc); err != nil {
-				zlog.V(1).Error(err, "unable to update status")
-				return ctrl.Result{}, err
-			} else {
-				zlog.V(1).Info("status updated")
-				return ctrl.Result{}, nil
-			}
-		} else {
-			if string(ngwc.Spec.ParametersRef.Group) != "core" {
-				zlog.V(1).Info("not core")
-				return ctrl.Result{}, err
-			}
-
-			if string(ngwc.Spec.ParametersRef.Kind) != "ConfigMap" {
-				zlog.V(1).Info("not ConfigMap")
-				return ctrl.Result{}, err
+		if ngwc.Spec.ParametersRef != nil {
+			if string(ngwc.Spec.ParametersRef.Group) != "" ||
+				string(ngwc.Spec.ParametersRef.Kind) != "ConfigMap" {
+				return ctrl.Result{}, fmt.Errorf("not supported parameter ref type: %v/%v",
+					ngwc.Spec.ParametersRef.Group, ngwc.Spec.ParametersRef.Kind)
 			}
 
 			if ngwc.Spec.ParametersRef.Namespace == nil {
-				zlog.V(1).Info("ns nil")
+				zlog.V(1).Info("parameterRef's namespace cannot be nil")
 				return ctrl.Result{}, err
 			}
 
@@ -119,35 +124,44 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				Name:      ngwc.Spec.ParametersRef.Name,
 			}
 
-			cm := &corev1.ConfigMap{}
+			cm := &v1.ConfigMap{}
 			if err := r.Get(ctx, key, cm); err != nil {
 				return ctrl.Result{}, err
 			} else {
-				zlog.V(1).Info("to handle configmap here " + cm.Name)
+				zlog.V(1).Info("to handle configmap: " + utils.Keyname(cm.Namespace, cm.Name))
 
 				// TODO: add more config for bigip here
 				// e.g. pkg.ActiveSIGs.Bigip.CreateVxlanTunnel(cm.Data["flannel_vxlan_tunnel_name"], cm.Data["flannel_vxlan_tunnel_port"])
+			}
+		}
+
+		pkg.PendingDeploys <- pkg.DeployRequest{
+			Meta: fmt.Sprintf("refreshing gateways for gatewayclass '%s'", req.NamespacedName.String()),
+			From: &ocfgs,
+			To:   &ncfgs,
+			StatusFunc: func() {
 				ngwc.Status.Conditions = []metav1.Condition{
 					{
 						Type:               "Accepted",
 						Status:             metav1.ConditionTrue,
 						Reason:             string(gatewayv1beta1.GatewayClassReasonAccepted),
-						Message:            "handled configmap",
+						Message:            "Accepted message",
 						LastTransitionTime: metav1.NewTime(time.Now()),
 					},
 				}
 
 				if err := r.Status().Update(ctx, ngwc); err != nil {
 					zlog.V(1).Error(err, "unable to update status")
-					return ctrl.Result{}, err
+					// return ctrl.Result{}, err
 				} else {
 					zlog.V(1).Info("status updated")
-					return ctrl.Result{}, nil
+					// return ctrl.Result{}, nil
 				}
-			}
-
+			},
+			Partition: req.NamespacedName.String(),
 		}
 	}
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
