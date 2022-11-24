@@ -59,13 +59,14 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
 			gw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
-			if ocfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{gw}, nil, nil); err != nil {
+			// Only when we know all the gateways can we know exactly which routes need to be cleared because of this gateway event.
+			gws := pkg.ActiveSIGs.GetNeighborGateways(gw)
+			if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), append(gws, gw)); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				zlog.V(1).Info("handling + deleting " + req.NamespacedName.String())
-				hrs := pkg.ActiveSIGs.AttachedHTTPRoutes(gw)
 				pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
-				if ncfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, hrs, nil); err != nil {
+				if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					pkg.PendingDeploys <- pkg.DeployRequest{
@@ -93,15 +94,14 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			pkg.ActiveSIGs.SetGateway(obj.DeepCopy())
 		}
 
-		ohrs := pkg.ActiveSIGs.AttachedHTTPRoutes(ogw)
-		if ocfgs, err := pkg.ParseRelatedForClass(string(ogw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ogw}, nil, nil); err != nil {
+		if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(ogw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ogw}); err != nil {
 			zlog.Error(err, "handling + upserting + parse related ocfgs "+req.NamespacedName.String())
 			return ctrl.Result{}, err
 		} else {
 			ngw := obj.DeepCopy()
 			if ngw.Spec.GatewayClassName == ogw.Spec.GatewayClassName {
 				pkg.ActiveSIGs.SetGateway(ngw)
-				if ncfgs, err := pkg.ParseRelatedForClass(string(ngw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ngw}, nil, nil); err != nil {
+				if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(ngw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ngw}); err != nil {
 					zlog.Error(err, "handling + upserting + parse related ncfgs "+req.NamespacedName.String())
 					return ctrl.Result{}, err
 				} else {
@@ -118,20 +118,21 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				}
 			} else {
 				// original state of new gatewayclass env
-				ocfgsN, err := pkg.ParseRelatedForClass(string(ngw.Spec.GatewayClassName), nil, ohrs, nil)
+				// gateway is go away
+				ngs := pkg.ActiveSIGs.GetNeighborGateways(ogw)
+
+				ocfgs, err := pkg.ParseGatewayRelatedForClass(string(ngw.Spec.GatewayClassName), append(ngs, ogw))
 				if err != nil {
 					return ctrl.Result{}, err
 				}
-				pkg.ActiveSIGs.SetGateway(ngw)
 
-				// gateway is go away
-				if ncfgsO, err := pkg.ParseRelatedForClass(string(ogw.Spec.GatewayClassName), nil, ohrs, nil); err != nil {
+				if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(ogw.Spec.GatewayClassName), ngs); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					pkg.PendingDeploys <- pkg.DeployRequest{
 						Meta: fmt.Sprintf("upserting gateway '%s'", req.NamespacedName.String()),
 						From: &ocfgs,
-						To:   &ncfgsO,
+						To:   &ncfgs,
 						StatusFunc: func() {
 							// do something
 						},
@@ -139,19 +140,26 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 					}
 				}
 
-				if ncfgs, err := pkg.ParseRelatedForClass(string(ngw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ngw}, nil, nil); err != nil {
+				pkg.ActiveSIGs.SetGateway(ngw)
+
+				ocfgs, err = pkg.ParseGatewayRelatedForClass(string(ngw.Spec.GatewayClassName), ngs)
+				if err != nil {
 					return ctrl.Result{}, err
-				} else {
-					pkg.PendingDeploys <- pkg.DeployRequest{
-						Meta: fmt.Sprintf("upserting gateway '%s'", req.NamespacedName.String()),
-						From: &ocfgsN,
-						To:   &ncfgs,
-						StatusFunc: func() {
-							// do something
-						},
-						Partition: string(ngw.Spec.GatewayClassName),
-					}
 				}
+				ncfgs, err := pkg.ParseGatewayRelatedForClass(string(ogw.Spec.GatewayClassName), append(ngs, ngw))
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				pkg.PendingDeploys <- pkg.DeployRequest{
+					Meta: fmt.Sprintf("upserting gateway '%s'", req.NamespacedName.String()),
+					From: &ocfgs,
+					To:   &ncfgs,
+					StatusFunc: func() {
+						// do something
+					},
+					Partition: string(ngw.Spec.GatewayClassName),
+				}
+
 				return ctrl.Result{}, nil
 			}
 		}

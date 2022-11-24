@@ -28,8 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "k8s.io/api/core/v1"
-
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 type EndpointsReconciler struct {
@@ -56,11 +54,10 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-			gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-			pkg.ActiveSIGs.GetRelatedObjs(nil, nil, []*v1.Service{svc}, &gwmap, &hrmap, &svcmap)
+			gws := pkg.ActiveSIGs.GetRootGateways(svc)
 			drs := map[string]pkg.DeployRequest{}
 
-			for _, gw := range gwmap {
+			for _, gw := range gws {
 				if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
 					drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
 						Meta:      fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
@@ -68,15 +65,14 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 					}
 				}
 				dr := drs[string(gw.Spec.GatewayClassName)]
-				if ocfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, nil, []*v1.Service{svc}); err != nil {
+				if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					dr.From = &ocfgs
 				}
 			}
-			hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
 			pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
-			for _, gw := range gwmap {
+			for _, gw := range gws {
 				if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
 					drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
 						Meta:      fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
@@ -84,7 +80,7 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 					}
 				}
 				dr := drs[string(gw.Spec.GatewayClassName)]
-				if ncfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, hrs, nil); err != nil {
+				if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					dr.To = &ncfgs
@@ -106,12 +102,11 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	} else {
 		svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-		gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-		pkg.ActiveSIGs.GetRelatedObjs(nil, nil, []*v1.Service{svc}, &gwmap, &hrmap, &svcmap)
+		gws := pkg.ActiveSIGs.GetRootGateways(svc)
 
 		drs := map[string]pkg.DeployRequest{}
 
-		for _, gw := range gwmap {
+		for _, gw := range gws {
 			if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
 				drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
 					Meta:      fmt.Sprintf("upserting endpoints '%s'", req.NamespacedName.String()),
@@ -119,14 +114,14 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				}
 			}
 			dr := drs[string(gw.Spec.GatewayClassName)]
-			if ocfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, nil, []*v1.Service{svc}); err != nil {
+			if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				dr.From = &ocfgs
 			}
 		}
 		pkg.ActiveSIGs.SetEndpoints(obj.DeepCopy())
-		for _, gw := range gwmap {
+		for _, gw := range gws {
 			if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
 				drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
 					Meta:      fmt.Sprintf("upserting endpoints '%s'", req.NamespacedName.String()),
@@ -134,7 +129,7 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				}
 			}
 			dr := drs[string(gw.Spec.GatewayClassName)]
-			if ncfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, nil, []*v1.Service{svc}); err != nil {
+			if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				dr.To = &ncfgs
@@ -162,12 +157,10 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-
-			gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-			pkg.ActiveSIGs.GetRelatedObjs(nil, nil, []*v1.Service{svc}, &gwmap, &hrmap, &svcmap)
+			gws := pkg.ActiveSIGs.GetRootGateways(svc)
 			drs := map[string]pkg.DeployRequest{}
 
-			for _, gw := range gwmap {
+			for _, gw := range gws {
 				if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
 					drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
 						Meta:      fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
@@ -175,15 +168,16 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 					}
 				}
 				dr := drs[string(gw.Spec.GatewayClassName)]
-				if ocfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, nil, []*v1.Service{svc}); err != nil {
+				if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					dr.From = &ocfgs
 				}
 			}
-			hrs := pkg.ActiveSIGs.HTTPRoutesRefsOf(svc)
+
 			pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
-			for _, gw := range gwmap {
+
+			for _, gw := range gws {
 				if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
 					drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
 						Meta:      fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
@@ -191,7 +185,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 					}
 				}
 				dr := drs[string(gw.Spec.GatewayClassName)]
-				if ncfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, hrs, nil); err != nil {
+				if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					dr.To = &ncfgs
@@ -214,12 +208,11 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	} else {
 		svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-		gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-		pkg.ActiveSIGs.GetRelatedObjs(nil, nil, []*v1.Service{svc}, &gwmap, &hrmap, &svcmap)
+		gws := pkg.ActiveSIGs.GetRootGateways(svc)
 
 		drs := map[string]pkg.DeployRequest{}
 
-		for _, gw := range gwmap {
+		for _, gw := range gws {
 			if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
 				drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
 					Meta:      fmt.Sprintf("upserting service '%s'", req.NamespacedName.String()),
@@ -227,14 +220,14 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				}
 			}
 			dr := drs[string(gw.Spec.GatewayClassName)]
-			if ocfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, nil, []*v1.Service{svc}); err != nil {
+			if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				dr.From = &ocfgs
 			}
 		}
 		pkg.ActiveSIGs.SetService(obj.DeepCopy())
-		for _, gw := range gwmap {
+		for _, gw := range gws {
 			if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
 				drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
 					Meta:      fmt.Sprintf("upserting service '%s'", req.NamespacedName.String()),
@@ -242,7 +235,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				}
 			}
 			dr := drs[string(gw.Spec.GatewayClassName)]
-			if ncfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, nil, []*v1.Service{svc}); err != nil {
+			if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				dr.To = &ncfgs

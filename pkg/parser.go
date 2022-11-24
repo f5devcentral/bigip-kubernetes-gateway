@@ -6,11 +6,84 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
-	v1 "k8s.io/api/core/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-func ParseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
+// func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, svcObjs []*v1.Service) (map[string]interface{}, error) {
+// 	defer utils.TimeItToPrometheus()()
+
+// 	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
+// 	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
+
+// 	rlt := map[string]interface{}{}
+// 	for _, gw := range gwmap {
+// 		if cfgs, err := ParseGateway(gw); err != nil {
+// 			return map[string]interface{}{}, err
+// 		} else {
+// 			for k, v := range cfgs {
+// 				rlt[k] = v
+// 			}
+// 		}
+// 	}
+// 	for _, hr := range hrmap {
+// 		if cfgs, err := ParseHTTPRoute(hr); err != nil {
+// 			return map[string]interface{}{}, err
+// 		} else {
+// 			for k, v := range cfgs {
+// 				rlt[k] = v
+// 			}
+// 		}
+// 	}
+
+// 	return map[string]interface{}{
+// 		"": rlt,
+// 	}, nil
+// }
+
+func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
+	defer utils.TimeItToPrometheus()()
+
+	if ActiveSIGs.GetGatewayClass(className) == nil {
+		return map[string]interface{}{}, nil
+	}
+	// gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
+	// ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
+
+	cgwObjs := []*gatewayv1beta1.Gateway{}
+	for _, gw := range gwObjs {
+		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(className) {
+			cgwObjs = append(cgwObjs, gw)
+		}
+	}
+
+	// return ParseGatewayRelated(cgwObjs)
+
+	rlt := map[string]interface{}{}
+	for _, gw := range cgwObjs {
+		if cfgs, err := parseGateway(gw); err != nil {
+			return map[string]interface{}{}, err
+		} else {
+			for k, v := range cfgs {
+				rlt[k] = v
+			}
+		}
+		hrs := ActiveSIGs.AttachedHTTPRoutes(gw)
+		for _, hr := range hrs {
+			if cfgs, err := parseHTTPRoute(className, hr); err != nil {
+				return map[string]interface{}{}, err
+			} else {
+				for k, v := range cfgs {
+					rlt[k] = v
+				}
+			}
+		}
+	}
+	return map[string]interface{}{
+		"": rlt,
+	}, nil
+}
+
+func parseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
 	if hr == nil {
@@ -29,7 +102,7 @@ func ParseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute) (map[string]
 	return rlt, nil
 }
 
-func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
+func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
 	if gw == nil {
@@ -104,11 +177,11 @@ func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	return rlt, nil
 }
 
-// func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, svcObjs []*v1.Service) (map[string]interface{}, error) {
+// func ParseGatewayRelated(gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 // 	defer utils.TimeItToPrometheus()()
 
 // 	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-// 	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
+// 	ActiveSIGs.GetGatewayRelated(gwObjs, &gwmap, &hrmap, &svcmap)
 
 // 	rlt := map[string]interface{}{}
 // 	for _, gw := range gwmap {
@@ -120,8 +193,16 @@ func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 // 			}
 // 		}
 // 	}
+
+// 	// TODO: tune it.
+// 	className := ""
+// 	if len(gwObjs) == 0 {
+// 		return map[string]interface{}{}, fmt.Errorf("should not happen here")
+// 	} else {
+// 		className = string(gwObjs[0].Spec.GatewayClassName)
+// 	}
 // 	for _, hr := range hrmap {
-// 		if cfgs, err := ParseHTTPRoute(hr); err != nil {
+// 		if cfgs, err := ParseHTTPRoute(className, hr); err != nil {
 // 			return map[string]interface{}{}, err
 // 		} else {
 // 			for k, v := range cfgs {
@@ -134,64 +215,6 @@ func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 // 		"": rlt,
 // 	}, nil
 // }
-
-func ParseRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, svcObjs []*v1.Service) (map[string]interface{}, error) {
-	defer utils.TimeItToPrometheus()()
-
-	if ActiveSIGs.GetGatewayClass(className) == nil {
-		return map[string]interface{}{}, nil
-	}
-	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
-
-	cgwObjs := []*gatewayv1beta1.Gateway{}
-	for _, gw := range gwmap {
-		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(className) {
-			cgwObjs = append(cgwObjs, gw)
-		}
-	}
-
-	return ParseGatewayRelated(cgwObjs)
-}
-
-func ParseGatewayRelated(gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
-	defer utils.TimeItToPrometheus()()
-
-	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-	ActiveSIGs.GetGatewayRelated(gwObjs, &gwmap, &hrmap, &svcmap)
-
-	rlt := map[string]interface{}{}
-	for _, gw := range gwmap {
-		if cfgs, err := ParseGateway(gw); err != nil {
-			return map[string]interface{}{}, err
-		} else {
-			for k, v := range cfgs {
-				rlt[k] = v
-			}
-		}
-	}
-
-	// TODO: tune it.
-	className := ""
-	if len(gwObjs) == 0 {
-		return map[string]interface{}{}, fmt.Errorf("should not happen here")
-	} else {
-		className = string(gwObjs[0].Spec.GatewayClassName)
-	}
-	for _, hr := range hrmap {
-		if cfgs, err := ParseHTTPRoute(className, hr); err != nil {
-			return map[string]interface{}{}, err
-		} else {
-			for k, v := range cfgs {
-				rlt[k] = v
-			}
-		}
-	}
-
-	return map[string]interface{}{
-		"": rlt,
-	}, nil
-}
 
 func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
 

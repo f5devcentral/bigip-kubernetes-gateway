@@ -65,7 +65,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			zlog.V(1).Info("deleting gatewayclass " + req.Name)
 			if gwc := pkg.ActiveSIGs.GetGatewayClass(req.Name); gwc != nil {
 				gws := pkg.ActiveSIGs.AttachedGateways(gwc)
-				if ocfgs, err := pkg.ParseGatewayRelated(gws); err != nil {
+				if ocfgs, err := pkg.ParseGatewayRelatedForClass(gwc.Name, gws); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					pkg.PendingDeploys <- pkg.DeployRequest{
@@ -100,13 +100,13 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		var err error
 		if ogwc != nil {
 			gws := pkg.ActiveSIGs.AttachedGateways(ogwc)
-			if ocfgs, err = pkg.ParseGatewayRelated(gws); err != nil {
+			if ocfgs, err = pkg.ParseGatewayRelatedForClass(ogwc.Name, gws); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
 		pkg.ActiveSIGs.SetGatewayClass(ngwc)
 		gws := pkg.ActiveSIGs.AttachedGateways(ngwc)
-		if ncfgs, err = pkg.ParseGatewayRelated(gws); err != nil {
+		if ncfgs, err = pkg.ParseGatewayRelatedForClass(ngwc.Name, gws); err != nil {
 			return ctrl.Result{}, err
 		}
 		// TODO: add logic more here. but don't want to compare configmap modifications and execute each time?
