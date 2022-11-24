@@ -10,7 +10,7 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
+func ParseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
 	if hr == nil {
@@ -22,7 +22,7 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 		return map[string]interface{}{}, err
 	}
 
-	if err := parseiRulesFrom(hr, rlt); err != nil {
+	if err := parseiRulesFrom(className, hr, rlt); err != nil {
 		return map[string]interface{}{}, err
 	}
 
@@ -104,11 +104,61 @@ func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	return rlt, nil
 }
 
-func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, svcObjs []*v1.Service) (map[string]interface{}, error) {
+// func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, svcObjs []*v1.Service) (map[string]interface{}, error) {
+// 	defer utils.TimeItToPrometheus()()
+
+// 	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
+// 	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
+
+// 	rlt := map[string]interface{}{}
+// 	for _, gw := range gwmap {
+// 		if cfgs, err := ParseGateway(gw); err != nil {
+// 			return map[string]interface{}{}, err
+// 		} else {
+// 			for k, v := range cfgs {
+// 				rlt[k] = v
+// 			}
+// 		}
+// 	}
+// 	for _, hr := range hrmap {
+// 		if cfgs, err := ParseHTTPRoute(hr); err != nil {
+// 			return map[string]interface{}{}, err
+// 		} else {
+// 			for k, v := range cfgs {
+// 				rlt[k] = v
+// 			}
+// 		}
+// 	}
+
+// 	return map[string]interface{}{
+// 		"": rlt,
+// 	}, nil
+// }
+
+func ParseRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, svcObjs []*v1.Service) (map[string]interface{}, error) {
+	defer utils.TimeItToPrometheus()()
+
+	if ActiveSIGs.GetGatewayClass(className) == nil {
+		return map[string]interface{}{}, nil
+	}
+	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
+	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
+
+	cgwObjs := []*gatewayv1beta1.Gateway{}
+	for _, gw := range gwmap {
+		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(className) {
+			cgwObjs = append(cgwObjs, gw)
+		}
+	}
+
+	return ParseGatewayRelated(cgwObjs)
+}
+
+func ParseGatewayRelated(gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
 	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
+	ActiveSIGs.GetGatewayRelated(gwObjs, &gwmap, &hrmap, &svcmap)
 
 	rlt := map[string]interface{}{}
 	for _, gw := range gwmap {
@@ -120,8 +170,16 @@ func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTT
 			}
 		}
 	}
+
+	// TODO: tune it.
+	className := ""
+	if len(gwObjs) == 0 {
+		return map[string]interface{}{}, fmt.Errorf("should not happen here")
+	} else {
+		className = string(gwObjs[0].Spec.GatewayClassName)
+	}
 	for _, hr := range hrmap {
-		if cfgs, err := ParseHTTPRoute(hr); err != nil {
+		if cfgs, err := ParseHTTPRoute(className, hr); err != nil {
 			return map[string]interface{}{}, err
 		} else {
 			for k, v := range cfgs {
@@ -275,7 +333,7 @@ func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) er
 	return nil
 }
 
-func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
+func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
 	// irules
 	name := strings.Join([]string{hr.Namespace, hr.Name}, ".")
 	hostnameConditions := []string{}
@@ -424,7 +482,7 @@ func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) e
 			case gatewayv1beta1.HTTPRouteFilterExtensionRef:
 				if er := filter.ExtensionRef; er != nil {
 					pool := fmt.Sprintf("%s.%s", hr.Namespace, er.Name)
-					filterActions = append(filterActions, fmt.Sprintf("pool /cis-c-tenant/%s", pool))
+					filterActions = append(filterActions, fmt.Sprintf("pool /%s/%s", className, pool))
 				}
 			}
 		}
@@ -437,7 +495,7 @@ func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) e
 				ns = string(*br.Namespace)
 			}
 			pn := strings.Join([]string{ns, string(br.Name)}, ".")
-			pool = fmt.Sprintf("pool /cis-c-tenant/%s", pn)
+			pool = fmt.Sprintf("pool /%s/%s", className, pn)
 		}
 		rules = append(rules, fmt.Sprintf(`	
 			if { %s } {

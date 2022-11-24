@@ -8,6 +8,9 @@ import (
 func deploy(bigip *f5_bigip.BIGIP, partition string, ocfgs, ncfgs *map[string]interface{}) error {
 	defer utils.TimeItToPrometheus()()
 
+	if err := bigip.DeployPartition(partition); err != nil {
+		return err
+	}
 	cmds, err := bigip.GenRestRequests(partition, ocfgs, ncfgs)
 	if err != nil {
 		return err

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -60,13 +59,13 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
 			gw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
-			if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
+			if ocfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{gw}, nil, nil); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				zlog.V(1).Info("handling + deleting " + req.NamespacedName.String())
 				hrs := pkg.ActiveSIGs.AttachedHTTPRoutes(gw)
 				pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
-				if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{}, hrs, []*v1.Service{}); err != nil {
+				if ncfgs, err := pkg.ParseRelatedForClass(string(gw.Spec.GatewayClassName), nil, hrs, nil); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					pkg.PendingDeploys <- pkg.DeployRequest{
@@ -76,6 +75,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 						StatusFunc: func() {
 							// do something
 						},
+						Partition: string(gw.Spec.GatewayClassName),
 					}
 				}
 			}
@@ -88,23 +88,69 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// upsert resources
 		zlog.V(1).Info("handling + upserting " + req.NamespacedName.String())
 		ogw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
-		if ocfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ogw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
+		if ogw == nil {
+			ogw = &obj
+			pkg.ActiveSIGs.SetGateway(obj.DeepCopy())
+		}
+
+		ohrs := pkg.ActiveSIGs.AttachedHTTPRoutes(ogw)
+		if ocfgs, err := pkg.ParseRelatedForClass(string(ogw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ogw}, nil, nil); err != nil {
 			zlog.Error(err, "handling + upserting + parse related ocfgs "+req.NamespacedName.String())
 			return ctrl.Result{}, err
 		} else {
 			ngw := obj.DeepCopy()
-			pkg.ActiveSIGs.SetGateway(ngw)
-			if ncfgs, err := pkg.ParseRelated([]*gatewayv1beta1.Gateway{ngw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
-				zlog.Error(err, "handling + upserting + parse related ncfgs "+req.NamespacedName.String())
-				return ctrl.Result{}, err
+			if ngw.Spec.GatewayClassName == ogw.Spec.GatewayClassName {
+				pkg.ActiveSIGs.SetGateway(ngw)
+				if ncfgs, err := pkg.ParseRelatedForClass(string(ngw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ngw}, nil, nil); err != nil {
+					zlog.Error(err, "handling + upserting + parse related ncfgs "+req.NamespacedName.String())
+					return ctrl.Result{}, err
+				} else {
+					pkg.PendingDeploys <- pkg.DeployRequest{
+						Meta: fmt.Sprintf("upserting gateway '%s'", req.NamespacedName.String()),
+						From: &ocfgs,
+						To:   &ncfgs,
+						StatusFunc: func() {
+							// do something
+						},
+						Partition: string(ngw.Spec.GatewayClassName),
+					}
+					return ctrl.Result{}, nil
+				}
 			} else {
-				pkg.PendingDeploys <- pkg.DeployRequest{
-					Meta: fmt.Sprintf("upserting gateway '%s'", req.NamespacedName.String()),
-					From: &ocfgs,
-					To:   &ncfgs,
-					StatusFunc: func() {
-						// do something
-					},
+				// original state of new gatewayclass env
+				ocfgsN, err := pkg.ParseRelatedForClass(string(ngw.Spec.GatewayClassName), nil, ohrs, nil)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				pkg.ActiveSIGs.SetGateway(ngw)
+
+				// gateway is go away
+				if ncfgsO, err := pkg.ParseRelatedForClass(string(ogw.Spec.GatewayClassName), nil, ohrs, nil); err != nil {
+					return ctrl.Result{}, err
+				} else {
+					pkg.PendingDeploys <- pkg.DeployRequest{
+						Meta: fmt.Sprintf("upserting gateway '%s'", req.NamespacedName.String()),
+						From: &ocfgs,
+						To:   &ncfgsO,
+						StatusFunc: func() {
+							// do something
+						},
+						Partition: string(ogw.Spec.GatewayClassName),
+					}
+				}
+
+				if ncfgs, err := pkg.ParseRelatedForClass(string(ngw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ngw}, nil, nil); err != nil {
+					return ctrl.Result{}, err
+				} else {
+					pkg.PendingDeploys <- pkg.DeployRequest{
+						Meta: fmt.Sprintf("upserting gateway '%s'", req.NamespacedName.String()),
+						From: &ocfgsN,
+						To:   &ncfgs,
+						StatusFunc: func() {
+							// do something
+						},
+						Partition: string(ngw.Spec.GatewayClassName),
+					}
 				}
 				return ctrl.Result{}, nil
 			}

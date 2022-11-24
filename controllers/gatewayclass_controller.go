@@ -49,6 +49,9 @@ type GatewayClassReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	zlog := log.FromContext(ctx)
+	if req.Namespace != "" {
+		return ctrl.Result{}, fmt.Errorf("gateway class namespace must be ''")
+	}
 
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)
@@ -56,22 +59,23 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	var obj gatewayv1beta1.GatewayClass
-	zlog.V(1).Info("is handling " + req.NamespacedName.String())
+	zlog.V(1).Info("handling gatewayclass " + req.Name)
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			if gwc := pkg.ActiveSIGs.GetGatewayClass(req.NamespacedName.String()); gwc != nil {
+			zlog.V(1).Info("deleting gatewayclass " + req.Name)
+			if gwc := pkg.ActiveSIGs.GetGatewayClass(req.Name); gwc != nil {
 				gws := pkg.ActiveSIGs.AttachedGateways(gwc)
-				if ocfgs, err := pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
+				if ocfgs, err := pkg.ParseGatewayRelated(gws); err != nil {
 					return ctrl.Result{}, err
 				} else {
 					pkg.PendingDeploys <- pkg.DeployRequest{
-						Meta: fmt.Sprintf("clearing gateways for gatewayclass '%s'", req.NamespacedName.String()),
+						Meta: fmt.Sprintf("clearing gateways for gatewayclass '%s'", req.Name),
 						From: &ocfgs,
 						To:   nil,
 						StatusFunc: func() {
-							pkg.ActiveSIGs.UnsetGatewayClass(req.NamespacedName.String())
+							pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
 						},
-						Partition: req.NamespacedName.String(),
+						Partition: req.Name,
 					}
 				}
 			}
@@ -81,28 +85,28 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	} else {
 		// upsert gatewayclass
-		zlog.V(1).Info("upserting " + req.NamespacedName.String())
+		zlog.V(1).Info("upserting gatewayclass " + req.Name)
 		ngwc := obj.DeepCopy()
 
 		if ngwc.Spec.ControllerName != gatewayv1beta1.GatewayController(pkg.ActiveSIGs.ControllerName) {
-			zlog.V(1).Info("ignore this gwc as its controllerName does not match this controller" + req.NamespacedName.String())
+			zlog.V(1).Info("ignore this gwc " + req.Name + " as its controllerName does not match " + pkg.ActiveSIGs.ControllerName)
 			return ctrl.Result{}, nil
 		}
 
-		ogwc := pkg.ActiveSIGs.GetGatewayClass(req.NamespacedName.String())
+		ogwc := pkg.ActiveSIGs.GetGatewayClass(req.Name)
 
 		ocfgs := map[string]interface{}{}
 		ncfgs := map[string]interface{}{}
 		var err error
 		if ogwc != nil {
 			gws := pkg.ActiveSIGs.AttachedGateways(ogwc)
-			if ocfgs, err = pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
+			if ocfgs, err = pkg.ParseGatewayRelated(gws); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
 		pkg.ActiveSIGs.SetGatewayClass(ngwc)
 		gws := pkg.ActiveSIGs.AttachedGateways(ngwc)
-		if ncfgs, err = pkg.ParseRelated(gws, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}); err != nil {
+		if ncfgs, err = pkg.ParseGatewayRelated(gws); err != nil {
 			return ctrl.Result{}, err
 		}
 		// TODO: add logic more here. but don't want to compare configmap modifications and execute each time?
@@ -135,30 +139,28 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			}
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("refreshing gateways for gatewayclass '%s'", req.NamespacedName.String()),
-			From: &ocfgs,
-			To:   &ncfgs,
-			StatusFunc: func() {
-				ngwc.Status.Conditions = []metav1.Condition{
-					{
-						Type:               "Accepted",
-						Status:             metav1.ConditionTrue,
-						Reason:             string(gatewayv1beta1.GatewayClassReasonAccepted),
-						Message:            "Accepted message",
-						LastTransitionTime: metav1.NewTime(time.Now()),
-					},
-				}
-
-				if err := r.Status().Update(ctx, ngwc); err != nil {
-					zlog.V(1).Error(err, "unable to update status")
-					// return ctrl.Result{}, err
-				} else {
-					zlog.V(1).Info("status updated")
-					// return ctrl.Result{}, nil
-				}
+		ngwc.Status.Conditions = []metav1.Condition{
+			{
+				Type:               "Accepted",
+				Status:             metav1.ConditionTrue,
+				Reason:             string(gatewayv1beta1.GatewayClassReasonAccepted),
+				Message:            "Accepted message",
+				LastTransitionTime: metav1.NewTime(time.Now()),
 			},
-			Partition: req.NamespacedName.String(),
+		}
+
+		if err := r.Status().Update(ctx, ngwc); err != nil {
+			zlog.V(1).Error(err, "unable to update status")
+			return ctrl.Result{}, err
+		} else {
+			zlog.V(1).Info("status updated")
+		}
+		pkg.PendingDeploys <- pkg.DeployRequest{
+			Meta:       fmt.Sprintf("refreshing gateways for gatewayclass '%s'", req.Name),
+			From:       &ocfgs,
+			To:         &ncfgs,
+			StatusFunc: func() {},
+			Partition:  req.Name,
 		}
 	}
 	return ctrl.Result{}, nil

@@ -42,7 +42,7 @@ func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
 	defer c.mutex.Unlock()
 
 	if obj != nil {
-		c.GatewayClasses[utils.Keyname(obj.Namespace, obj.Name)] = obj
+		c.GatewayClasses[obj.Name] = obj
 	}
 }
 
@@ -65,13 +65,7 @@ func (c *SIGCache) SetGateway(obj *gatewayv1beta1.Gateway) {
 	defer c.mutex.Unlock()
 
 	if obj != nil {
-		keyname := utils.Keyname(obj.Namespace, obj.Name)
-		if _, f := c.GatewayClasses[string(obj.Spec.GatewayClassName)]; f {
-			slog.Debugf("set this gw %s", keyname)
-			c.Gateway[keyname] = obj
-		} else {
-			delete(c.Gateway, keyname)
-		}
+		c.Gateway[utils.Keyname(obj.Namespace, obj.Name)] = obj
 	}
 }
 
@@ -432,6 +426,47 @@ func (c *SIGCache) _getRelatedObjs(
 	}
 }
 
+func (c *SIGCache) GetGatewayRelated(
+	gwObjs []*gatewayv1beta1.Gateway,
+	gwmap *map[string]*gatewayv1beta1.Gateway,
+	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
+	svcmap *map[string]*v1.Service) {
+
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	c._getGatewayRelated(gwObjs, gwmap, hrmap, svcmap)
+}
+
+func (c *SIGCache) _getGatewayRelated(
+	gwObjs []*gatewayv1beta1.Gateway,
+	gwmap *map[string]*gatewayv1beta1.Gateway,
+	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
+	svcmap *map[string]*v1.Service) {
+	for _, gwObj := range gwObjs {
+		if gwObj != nil {
+			name := utils.Keyname(gwObj.Namespace, gwObj.Name)
+			(*gwmap)[name] = c.Gateway[name]
+		}
+		hrs := c._attachedHTTPRoutes(gwObj)
+		for _, hr := range hrs {
+			name := utils.Keyname(hr.Namespace, hr.Name)
+			if _, ok := (*hrmap)[name]; !ok {
+				(*hrmap)[name] = hr
+				svcs := c._serviceRefsOf(hr)
+				for _, svc := range svcs {
+					name := utils.Keyname(svc.Namespace, svc.Name)
+					if _, ok := (*svcmap)[name]; !ok {
+						(*svcmap)[name] = svc
+					}
+				}
+			}
+		}
+	}
+}
+
 func (c *SIGCache) syncCoreV1Resources(kubeClient kubernetes.Interface) error {
 	defer utils.TimeItToPrometheus()()
 
@@ -498,8 +533,8 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	} else {
 		for _, gwc := range gwcList.Items {
 			if gwc.Spec.ControllerName == gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
-				slog.Infof("found gatewayclass %s", utils.Keyname(gwc.Namespace, gwc.Name))
-				c.GatewayClasses[utils.Keyname(gwc.Namespace, gwc.Name)] = gwc.DeepCopy()
+				slog.Infof("found gatewayclass %s", gwc.Name)
+				c.GatewayClasses[gwc.Name] = gwc.DeepCopy()
 			} else {
 				slog.Infof("This gwc's ControllerName %s not equal to this controller. Ignore.", gwc.Spec.ControllerName)
 			}
@@ -510,13 +545,8 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 		return err
 	} else {
 		for _, gw := range gtwList.Items {
-			if _, f := c.GatewayClasses[string(gw.Spec.GatewayClassName)]; f {
-				slog.Debugf("found gateway %s", utils.Keyname(gw.Namespace, gw.Name))
-				c.Gateway[utils.Keyname(gw.Namespace, gw.Name)] = gw.DeepCopy()
-			} else {
-				slog.Infof("This gw's GatewayClassName %s not belong to this controller. Ignore.", gw.Spec.GatewayClassName)
-				delete(c.Gateway, utils.Keyname(gw.Namespace, gw.Name))
-			}
+			slog.Debugf("found gateway %s", utils.Keyname(gw.Namespace, gw.Name))
+			c.Gateway[utils.Keyname(gw.Namespace, gw.Name)] = gw.DeepCopy()
 		}
 	}
 	if err := mgr.GetCache().List(context.TODO(), &hrList, &client.ListOptions{}); err != nil {
