@@ -36,6 +36,14 @@ func deploy(bigip *f5_bigip.BIGIP, partition string, ocfgs, ncfgs *map[string]in
 		return err
 	}
 	return bigip.DoRestRequests(cmds)
+	// if err := bigip.DoRestRequests(cmds); err != nil {
+	// 	return err
+	// }
+	// if ncfgs == nil {
+	// 	slog.Debugf("deleting partition: %s", partition)
+	// 	return bigip.DeletePartition(partition)
+	// }
+	// return nil
 }
 
 // func filterPoolCfgs(ocfgs, ncfgs *map[string]interface{}) (*map[string]interface{}, *map[string]interface{}, error) {
@@ -96,4 +104,10 @@ func Deployer(stopCh chan struct{}, bigip *f5_bigip.BIGIP) {
 			}
 		}
 	}
+}
+
+func ModifyDbValue(bigip *f5_bigip.BIGIP) error {
+	//tmrouted.tmos.routing
+	slog.Debugf("enabing tmrouted.tmos.routing ")
+	return bigip.ModifyDbValue("tmrouted.tmos.routing", "enable")
 }

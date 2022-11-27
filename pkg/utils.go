@@ -27,6 +27,7 @@ func init() {
 		mutex:          sync.RWMutex{},
 		SyncedAtStart:  false,
 		ControllerName: "",
+		Mode:           "",
 		Gateway:        map[string]*gatewayv1beta1.Gateway{},
 		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
 		Endpoints:      map[string]*v1.Endpoints{},

@@ -599,3 +599,29 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 	rlt["ltm/rule/"+name] = ruleObj
 	return nil
 }
+
+func ParseNeighsFrom(routerName, localAs, remoteAs string, addresses []string) (map[string]interface{}, error) {
+	rlt := map[string]interface{}{}
+
+	name := strings.Join([]string{"Common", routerName}, ".")
+	rlt["net/routing/bgp/"+name] = map[string]interface{}{
+		"name":     name,
+		"localAs":  localAs,
+		"neighbor": []interface{}{},
+	}
+
+	fmtneigs := []interface{}{}
+	for _, address := range addresses {
+		slog.Infof("parse this address: %s", address)
+		fmtneigs = append(fmtneigs, map[string]interface{}{
+			"name":     address,
+			"remoteAs": remoteAs,
+		})
+	}
+
+	rlt["net/routing/bgp/"+name].(map[string]interface{})["neighbor"] = fmtneigs
+
+	return map[string]interface{}{
+		"": rlt,
+	}, nil
+}

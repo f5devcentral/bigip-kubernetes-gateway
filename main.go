@@ -71,6 +71,7 @@ func main() {
 		bigipPassword        string
 		credsDir             string
 		controllerName       string
+		mode                 string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -85,6 +86,7 @@ func main() {
 	flag.StringVar(&credsDir, "credentials-directory", "", "Optional, directory that contains the BIG-IP username,"+
 		"password, and/or url files. To be used instead of username, password, and/or url arguments.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
+	flag.StringVar(&mode, "mode", "", "if set to calico, make some calico related configs onto bigip.")
 
 	opts := zap.Options{
 		Development: true,
@@ -93,6 +95,7 @@ func main() {
 	flag.Parse()
 
 	pkg.ActiveSIGs.ControllerName = controllerName
+	pkg.ActiveSIGs.Mode = mode
 
 	if (len(bigipUrl) == 0 || len(bigipUsername) == 0 ||
 		len(bigipPassword) == 0) && len(credsDir) == 0 {
@@ -144,6 +147,11 @@ func main() {
 	mgr.AddMetricsExtraHandler("/stats", promhttp.Handler())
 
 	stopCh := make(chan struct{})
+
+	if mode == "calico" {
+		pkg.ModifyDbValue(bigip)
+	}
+
 	go pkg.Deployer(stopCh, bigip)
 
 	if err := (&controllers.GatewayClassReconciler{

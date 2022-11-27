@@ -108,3 +108,22 @@ func (ns *Nodes) All() map[string]K8Node {
 	}
 	return rlt
 }
+
+func (ns *Nodes) AllIpAddresses() []string {
+	NodeCache.mutex <- true
+	defer func() { <-NodeCache.mutex }()
+
+	rlt := []string{}
+	for _, n := range ns.Items {
+		if n.IpAddr != "" {
+			slog.Infof("n.IpAddress is %s:", n.IpAddr)
+			rlt = append(rlt, n.IpAddr)
+		}
+		if n.IpAddrV6 != "" {
+			slog.Infof("n.IpAddrV6 is %s:", n.IpAddrV6)
+			rlt = append(rlt, n.IpAddrV6)
+		}
+
+	}
+	return rlt
+}
