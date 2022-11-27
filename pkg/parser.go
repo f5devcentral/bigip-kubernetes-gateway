@@ -83,6 +83,57 @@ func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gate
 	}, nil
 }
 
+// ParseServicesRelatedForAll parse all refered services
+func ParseServicesRelatedForAll() (map[string]interface{}, error) {
+
+	// all services that are referenced but may not exist
+	svcs := ActiveSIGs.AllAttachedServiceKeys()
+
+	return ParseReferedServiceKeys(svcs)
+}
+
+func ParseReferedServiceKeys(svcs []string) (map[string]interface{}, error) {
+	rlt := map[string]interface{}{}
+	for _, svc := range svcs {
+
+		ns := strings.Split(svc, "/")[0]
+		n := strings.Split(svc, "/")[1]
+
+		name := strings.Join([]string{ns, n}, ".")
+		rlt["ltm/pool/"+name] = map[string]interface{}{
+			"name":    name,
+			"monitor": "min 1 of tcp",
+			"members": []interface{}{},
+
+			// "minActiveMembers": 0,
+			// TODO: there's at least one field for PATCH a pool. or we may need to fix that
+			// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
+		}
+		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
+			return rlt, err
+		} else {
+			rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
+		}
+
+		if mon, err := parseMonitorFrom(ns, n); err != nil {
+			return rlt, err
+		} else {
+			rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
+		}
+
+		if err := parseArpsFrom(ns, n, rlt); err != nil {
+			return rlt, err
+		}
+		if err := parseNodesFrom(ns, n, rlt); err != nil {
+			return rlt, err
+		}
+	}
+
+	return map[string]interface{}{
+		"": rlt,
+	}, nil
+}
+
 func parseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
@@ -91,9 +142,9 @@ func parseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute) (map[string]
 	}
 
 	rlt := map[string]interface{}{}
-	if err := parsePoolsFrom(hr, rlt); err != nil {
-		return map[string]interface{}{}, err
-	}
+	// if err := parsePoolsFrom(hr, rlt); err != nil {
+	// 	return map[string]interface{}{}, err
+	// }
 
 	if err := parseiRulesFrom(className, hr, rlt); err != nil {
 		return map[string]interface{}{}, err
@@ -216,70 +267,70 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 // 	}, nil
 // }
 
-func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
+// func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
 
-	creatPool := func(ns, n string, rlt map[string]interface{}) error {
-		name := strings.Join([]string{ns, n}, ".")
-		rlt["ltm/pool/"+name] = map[string]interface{}{
-			"name":    name,
-			"monitor": "min 1 of tcp",
-			"members": []interface{}{},
+// 	creatPool := func(ns, n string, rlt map[string]interface{}) error {
+// 		name := strings.Join([]string{ns, n}, ".")
+// 		rlt["ltm/pool/"+name] = map[string]interface{}{
+// 			"name":    name,
+// 			"monitor": "min 1 of tcp",
+// 			"members": []interface{}{},
 
-			// "minActiveMembers": 0,
-			// TODO: there's at least one field for PATCH a pool. or we may need to fix that
-			// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
-		}
-		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
-			return err
-		} else {
-			rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
-		}
+// 			// "minActiveMembers": 0,
+// 			// TODO: there's at least one field for PATCH a pool. or we may need to fix that
+// 			// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
+// 		}
+// 		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
+// 			return err
+// 		} else {
+// 			rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
+// 		}
 
-		if mon, err := parseMonitorFrom(ns, n); err != nil {
-			return err
-		} else {
-			rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
-		}
+// 		if mon, err := parseMonitorFrom(ns, n); err != nil {
+// 			return err
+// 		} else {
+// 			rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
+// 		}
 
-		if err := parseArpsFrom(ns, n, rlt); err != nil {
-			return err
-		}
-		if err := parseNodesFrom(ns, n, rlt); err != nil {
-			return err
-		}
-		return nil
-	}
+// 		if err := parseArpsFrom(ns, n, rlt); err != nil {
+// 			return err
+// 		}
+// 		if err := parseNodesFrom(ns, n, rlt); err != nil {
+// 			return err
+// 		}
+// 		return nil
+// 	}
 
-	for _, rl := range hr.Spec.Rules {
-		for _, br := range rl.BackendRefs {
-			ns := hr.Namespace
-			if br.Namespace != nil {
-				ns = string(*br.Namespace)
-			}
-			if err := creatPool(ns, string(br.Name), rlt); err != nil {
-				return err
-			}
-		}
-	}
+// 	for _, rl := range hr.Spec.Rules {
+// 		for _, br := range rl.BackendRefs {
+// 			ns := hr.Namespace
+// 			if br.Namespace != nil {
+// 				ns = string(*br.Namespace)
+// 			}
+// 			if err := creatPool(ns, string(br.Name), rlt); err != nil {
+// 				return err
+// 			}
+// 		}
+// 	}
 
-	// pools from ExtensionRef as well.
-	for _, rl := range hr.Spec.Rules {
-		for _, fl := range rl.Filters {
-			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
-				er := fl.ExtensionRef
-				if er.Group != "" || er.Kind != "Service" {
-					return fmt.Errorf("resource %s of '%s' not supported", er.Name, utils.Keyname(string(er.Group), string(er.Kind)))
-				} else {
-					if err := creatPool(hr.Namespace, string(er.Name), rlt); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
+// 	// pools from ExtensionRef as well.
+// 	for _, rl := range hr.Spec.Rules {
+// 		for _, fl := range rl.Filters {
+// 			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
+// 				er := fl.ExtensionRef
+// 				if er.Group != "" || er.Kind != "Service" {
+// 					return fmt.Errorf("resource %s of '%s' not supported", er.Name, utils.Keyname(string(er.Group), string(er.Kind)))
+// 				} else {
+// 					if err := creatPool(hr.Namespace, string(er.Name), rlt); err != nil {
+// 						return err
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // TODO: find the way to set monitor
 func parseMonitorFrom(svcNamespace, svcName string) (string, error) {
@@ -505,7 +556,7 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 			case gatewayv1beta1.HTTPRouteFilterExtensionRef:
 				if er := filter.ExtensionRef; er != nil {
 					pool := fmt.Sprintf("%s.%s", hr.Namespace, er.Name)
-					filterActions = append(filterActions, fmt.Sprintf("pool /%s/%s", className, pool))
+					filterActions = append(filterActions, fmt.Sprintf("pool /%s/%s", "cis-c-tenant", pool))
 				}
 			}
 		}
@@ -518,7 +569,7 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 				ns = string(*br.Namespace)
 			}
 			pn := strings.Join([]string{ns, string(br.Name)}, ".")
-			pool = fmt.Sprintf("pool /%s/%s", className, pn)
+			pool = fmt.Sprintf("pool /%s/%s", "cis-c-tenant", pn)
 		}
 		rules = append(rules, fmt.Sprintf(`	
 			if { %s } {

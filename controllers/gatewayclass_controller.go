@@ -62,53 +62,13 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	zlog.V(1).Info("handling gatewayclass " + req.Name)
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			zlog.V(1).Info("deleting gatewayclass " + req.Name)
-			if gwc := pkg.ActiveSIGs.GetGatewayClass(req.Name); gwc != nil {
-				gws := pkg.ActiveSIGs.AttachedGateways(gwc)
-				if ocfgs, err := pkg.ParseGatewayRelatedForClass(gwc.Name, gws); err != nil {
-					return ctrl.Result{}, err
-				} else {
-					pkg.PendingDeploys <- pkg.DeployRequest{
-						Meta: fmt.Sprintf("clearing gateways for gatewayclass '%s'", req.Name),
-						From: &ocfgs,
-						To:   nil,
-						StatusFunc: func() {
-							pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
-						},
-						Partition: req.Name,
-					}
-				}
-			}
-			return ctrl.Result{}, nil
+			defer pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
+			return handleDeletingGatewayClass(ctx, req)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
-		// upsert gatewayclass
-		zlog.V(1).Info("upserting gatewayclass " + req.Name)
 		ngwc := obj.DeepCopy()
-
-		if ngwc.Spec.ControllerName != gatewayv1beta1.GatewayController(pkg.ActiveSIGs.ControllerName) {
-			zlog.V(1).Info("ignore this gwc " + req.Name + " as its controllerName does not match " + pkg.ActiveSIGs.ControllerName)
-			return ctrl.Result{}, nil
-		}
-
-		ogwc := pkg.ActiveSIGs.GetGatewayClass(req.Name)
-
-		ocfgs := map[string]interface{}{}
-		ncfgs := map[string]interface{}{}
-		var err error
-		if ogwc != nil {
-			gws := pkg.ActiveSIGs.AttachedGateways(ogwc)
-			if ocfgs, err = pkg.ParseGatewayRelatedForClass(ogwc.Name, gws); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		pkg.ActiveSIGs.SetGatewayClass(ngwc)
-		gws := pkg.ActiveSIGs.AttachedGateways(ngwc)
-		if ncfgs, err = pkg.ParseGatewayRelatedForClass(ngwc.Name, gws); err != nil {
-			return ctrl.Result{}, err
-		}
 		// TODO: add logic more here. but don't want to compare configmap modifications and execute each time?
 		// create partiton in the bigip here since we consider gwc name to be partiton name
 		if ngwc.Spec.ParametersRef != nil {
@@ -155,15 +115,11 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		} else {
 			zlog.V(1).Info("status updated")
 		}
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta:       fmt.Sprintf("refreshing gateways for gatewayclass '%s'", req.Name),
-			From:       &ocfgs,
-			To:         &ncfgs,
-			StatusFunc: func() {},
-			Partition:  req.Name,
-		}
+
+		// upsert gatewayclass
+		defer pkg.ActiveSIGs.SetGatewayClass(&obj)
+		return handleUpsertingGatewayClass(ctx, &obj)
 	}
-	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -171,4 +127,108 @@ func (r *GatewayClassReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&gatewayv1beta1.GatewayClass{}).
 		Complete(r)
+}
+
+func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	zlog := log.FromContext(ctx)
+	zlog.V(1).Info("deleting gatewayclass " + req.Name)
+
+	gwc := pkg.ActiveSIGs.GetGatewayClass(req.Name)
+	if gwc == nil {
+		return ctrl.Result{}, nil
+	}
+	ocfgs := map[string]interface{}{}
+	// ocfgs, ncfgs := map[string]interface{}{}, map[string]interface{}{}
+	opcfgs, npcfgs := map[string]interface{}{}, map[string]interface{}{}
+	var err error
+
+	gws := pkg.ActiveSIGs.AttachedGateways(gwc)
+	if ocfgs, err = pkg.ParseGatewayRelatedForClass(gwc.Name, gws); err != nil {
+		return ctrl.Result{}, err
+	}
+	if opcfgs, err = pkg.ParseServicesRelatedForAll(); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
+
+	if npcfgs, err = pkg.ParseServicesRelatedForAll(); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	pkg.PendingDeploys <- pkg.DeployRequest{
+		Meta: fmt.Sprintf("clearing gateways for gatewayclass '%s'", req.Name),
+		From: &ocfgs,
+		To:   nil,
+		StatusFunc: func() {
+		},
+		Partition: req.Name,
+	}
+
+	pkg.PendingDeploys <- pkg.DeployRequest{
+		Meta: fmt.Sprintf("updating services for gatewayclass '%s'", req.Name),
+		From: &opcfgs,
+		To:   &npcfgs,
+		StatusFunc: func() {
+		},
+		Partition: "cis-c-tenant",
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func handleUpsertingGatewayClass(ctx context.Context, obj *gatewayv1beta1.GatewayClass) (ctrl.Result, error) {
+	zlog := log.FromContext(ctx)
+
+	reqn := utils.Keyname(obj.Namespace, obj.Name)
+	zlog.V(1).Info("upserting gatewayclass " + reqn)
+	ngwc := obj.DeepCopy()
+
+	if ngwc.Spec.ControllerName != gatewayv1beta1.GatewayController(pkg.ActiveSIGs.ControllerName) {
+		zlog.V(1).Info("ignore this gwc " + reqn + " as its controllerName does not match " + pkg.ActiveSIGs.ControllerName)
+		return ctrl.Result{}, nil
+	}
+
+	ocfgs, ncfgs := map[string]interface{}{}, map[string]interface{}{}
+	opcfgs, npcfgs := map[string]interface{}{}, map[string]interface{}{}
+	var err error
+
+	if ogwc := pkg.ActiveSIGs.GetGatewayClass(reqn); ogwc != nil {
+		gws := pkg.ActiveSIGs.AttachedGateways(ogwc)
+		if ocfgs, err = pkg.ParseGatewayRelatedForClass(ogwc.Name, gws); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	if opcfgs, err = pkg.ParseServicesRelatedForAll(); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	pkg.ActiveSIGs.SetGatewayClass(ngwc)
+
+	if npcfgs, err = pkg.ParseServicesRelatedForAll(); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	gws := pkg.ActiveSIGs.AttachedGateways(ngwc)
+	if ncfgs, err = pkg.ParseGatewayRelatedForClass(ngwc.Name, gws); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	pkg.PendingDeploys <- pkg.DeployRequest{
+		Meta:       fmt.Sprintf("refreshing services for gatewayclass '%s'", reqn),
+		From:       &opcfgs,
+		To:         &npcfgs,
+		StatusFunc: func() {},
+		Partition:  "cis-c-tenant",
+	}
+
+	pkg.PendingDeploys <- pkg.DeployRequest{
+		Meta:       fmt.Sprintf("refreshing gateways for gatewayclass '%s'", reqn),
+		From:       &ocfgs,
+		To:         &ncfgs,
+		StatusFunc: func() {},
+		Partition:  reqn,
+	}
+
+	return ctrl.Result{}, nil
 }

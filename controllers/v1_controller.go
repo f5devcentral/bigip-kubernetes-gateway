@@ -22,6 +22,7 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
+	"gitee.com/zongzw/f5-bigip-rest/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,99 +54,14 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// zlog.V(1).Info("endpoint event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-			gws := pkg.ActiveSIGs.GetRootGateways(svc)
-			drs := map[string]pkg.DeployRequest{}
-
-			for _, gw := range gws {
-				if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-					drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
-						Meta:      fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
-						Partition: string(gw.Spec.GatewayClassName),
-					}
-				}
-				dr := drs[string(gw.Spec.GatewayClassName)]
-				if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-					return ctrl.Result{}, err
-				} else {
-					dr.From = &ocfgs
-				}
-			}
-			pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
-			for _, gw := range gws {
-				if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-					drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
-						Meta:      fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
-						Partition: string(gw.Spec.GatewayClassName),
-					}
-				}
-				dr := drs[string(gw.Spec.GatewayClassName)]
-				if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-					return ctrl.Result{}, err
-				} else {
-					dr.To = &ncfgs
-				}
-			}
-			for _, dr := range drs {
-				pkg.PendingDeploys <- pkg.DeployRequest{
-					Meta: dr.Meta,
-					From: dr.From,
-					To:   dr.To,
-					StatusFunc: func() {
-					},
-					Partition: dr.Partition,
-				}
-			}
-			return ctrl.Result{}, nil
+			defer pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
+			return handleDeletingEndpoints(ctx, req)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
-		svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-		gws := pkg.ActiveSIGs.GetRootGateways(svc)
-
-		drs := map[string]pkg.DeployRequest{}
-
-		for _, gw := range gws {
-			if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-				drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
-					Meta:      fmt.Sprintf("upserting endpoints '%s'", req.NamespacedName.String()),
-					Partition: string(gw.Spec.GatewayClassName),
-				}
-			}
-			dr := drs[string(gw.Spec.GatewayClassName)]
-			if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-				return ctrl.Result{}, err
-			} else {
-				dr.From = &ocfgs
-			}
-		}
-		pkg.ActiveSIGs.SetEndpoints(obj.DeepCopy())
-		for _, gw := range gws {
-			if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-				drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
-					Meta:      fmt.Sprintf("upserting endpoints '%s'", req.NamespacedName.String()),
-					Partition: string(gw.Spec.GatewayClassName),
-				}
-			}
-			dr := drs[string(gw.Spec.GatewayClassName)]
-			if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-				return ctrl.Result{}, err
-			} else {
-				dr.To = &ncfgs
-			}
-		}
-		for _, dr := range drs {
-			pkg.PendingDeploys <- pkg.DeployRequest{
-				Meta: dr.Meta,
-				From: dr.From,
-				To:   dr.To,
-				StatusFunc: func() {
-				},
-				Partition: dr.Partition,
-			}
-		}
-		return ctrl.Result{}, nil
+		defer pkg.ActiveSIGs.SetEndpoints(&obj)
+		return handleUpsertingEndpoints(ctx, &obj)
 	}
 }
 
@@ -156,103 +72,14 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	zlog.V(1).Info("Service event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-			gws := pkg.ActiveSIGs.GetRootGateways(svc)
-			drs := map[string]pkg.DeployRequest{}
-
-			for _, gw := range gws {
-				if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-					drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
-						Meta:      fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
-						Partition: string(gw.Spec.GatewayClassName),
-					}
-				}
-				dr := drs[string(gw.Spec.GatewayClassName)]
-				if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-					return ctrl.Result{}, err
-				} else {
-					dr.From = &ocfgs
-				}
-			}
-
-			pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
-
-			for _, gw := range gws {
-				if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-					drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
-						Meta:      fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
-						Partition: string(gw.Spec.GatewayClassName),
-					}
-				}
-				dr := drs[string(gw.Spec.GatewayClassName)]
-				if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-					return ctrl.Result{}, err
-				} else {
-					dr.To = &ncfgs
-				}
-			}
-			for _, dr := range drs {
-				pkg.PendingDeploys <- pkg.DeployRequest{
-					Meta: dr.Meta,
-					From: dr.From,
-					To:   dr.To,
-					StatusFunc: func() {
-					},
-					Partition: dr.Partition,
-				}
-			}
-
-			return ctrl.Result{}, nil
+			defer pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
+			return handleDeletingService(ctx, req)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
-		svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-		gws := pkg.ActiveSIGs.GetRootGateways(svc)
-
-		drs := map[string]pkg.DeployRequest{}
-
-		for _, gw := range gws {
-			if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-				drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
-					Meta:      fmt.Sprintf("upserting service '%s'", req.NamespacedName.String()),
-					Partition: string(gw.Spec.GatewayClassName),
-				}
-			}
-			dr := drs[string(gw.Spec.GatewayClassName)]
-			if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-				return ctrl.Result{}, err
-			} else {
-				dr.From = &ocfgs
-			}
-		}
-		pkg.ActiveSIGs.SetService(obj.DeepCopy())
-		for _, gw := range gws {
-			if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-				drs[string(gw.Spec.GatewayClassName)] = pkg.DeployRequest{
-					Meta:      fmt.Sprintf("upserting service '%s'", req.NamespacedName.String()),
-					Partition: string(gw.Spec.GatewayClassName),
-				}
-			}
-			dr := drs[string(gw.Spec.GatewayClassName)]
-			if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-				return ctrl.Result{}, err
-			} else {
-				dr.To = &ncfgs
-			}
-		}
-		for _, dr := range drs {
-			pkg.PendingDeploys <- pkg.DeployRequest{
-				Meta: dr.Meta,
-				From: dr.From,
-				To:   dr.To,
-				StatusFunc: func() {
-				},
-				Partition: dr.Partition,
-			}
-		}
-
-		return ctrl.Result{}, nil
+		defer pkg.ActiveSIGs.SetService(&obj)
+		return handleUpsertingService(ctx, &obj)
 	}
 }
 
@@ -312,3 +139,242 @@ func SetupReconcilerForCoreV1WithManager(mgr ctrl.Manager) error {
 // 		Partition: gwc,
 // 	}
 // }
+
+func handleDeletingEndpoints(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+
+	// opcfgs, err := pkg.ParseServicesRelatedForAll()
+	// if err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+
+	// pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
+
+	// npcfgs, err := pkg.ParseServicesRelatedForAll()
+	// if err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+	// pkg.PendingDeploys <- pkg.DeployRequest{
+	// 	Meta: fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
+	// 	From: &opcfgs,
+	// 	To:   &npcfgs,
+	// 	StatusFunc: func() {
+	// 	},
+	// 	Partition: "cis-c-tenant",
+	// }
+
+	// return ctrl.Result{}, nil
+
+	svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
+
+	found := false
+	for _, gw := range pkg.ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
+		if pkg.ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
+			found = true
+			break
+		}
+	}
+	if found {
+		opcfgs, err := pkg.ParseReferedServiceKeys([]string{req.NamespacedName.String()})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
+		npcfgs, err := pkg.ParseReferedServiceKeys([]string{req.NamespacedName.String()})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pkg.PendingDeploys <- pkg.DeployRequest{
+			Meta: fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
+			From: &opcfgs,
+			To:   &npcfgs,
+			StatusFunc: func() {
+			},
+			Partition: "cis-c-tenant",
+		}
+
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func handleUpsertingEndpoints(ctx context.Context, obj *v1.Endpoints) (ctrl.Result, error) {
+
+	// opcfgs, err := pkg.ParseServicesRelatedForAll()
+	// if err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+
+	// pkg.ActiveSIGs.SetEndpoints(obj.DeepCopy())
+
+	// npcfgs, err := pkg.ParseServicesRelatedForAll()
+	// if err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+	// pkg.PendingDeploys <- pkg.DeployRequest{
+	// 	Meta: fmt.Sprintf("upserting endpoints '%s'", utils.Keyname(obj.Namespace, obj.Name)),
+	// 	From: &opcfgs,
+	// 	To:   &npcfgs,
+	// 	StatusFunc: func() {
+	// 	},
+	// 	Partition: "cis-c-tenant",
+	// }
+
+	// return ctrl.Result{}, nil
+
+	reqnsn := utils.Keyname(obj.Namespace, obj.Name)
+	svc := pkg.ActiveSIGs.GetService(reqnsn)
+
+	found := false
+	for _, gw := range pkg.ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
+		if pkg.ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
+			found = true
+			break
+		}
+	}
+
+	if found {
+		opcfgs, err := pkg.ParseReferedServiceKeys([]string{reqnsn})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pkg.ActiveSIGs.SetEndpoints(obj.DeepCopy())
+		npcfgs, err := pkg.ParseReferedServiceKeys([]string{reqnsn})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pkg.PendingDeploys <- pkg.DeployRequest{
+			Meta: fmt.Sprintf("upserting endpoints '%s'", reqnsn),
+			From: &opcfgs,
+			To:   &npcfgs,
+			StatusFunc: func() {
+			},
+			Partition: "cis-c-tenant",
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func handleDeletingService(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+
+	// opcfgs, err := pkg.ParseServicesRelatedForAll()
+	// if err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+
+	// pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
+
+	// npcfgs, err := pkg.ParseServicesRelatedForAll()
+	// if err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+	// pkg.PendingDeploys <- pkg.DeployRequest{
+	// 	Meta: fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
+	// 	From: &opcfgs,
+	// 	To:   &npcfgs,
+	// 	StatusFunc: func() {
+	// 	},
+	// 	Partition: "cis-c-tenant",
+	// }
+
+	// return ctrl.Result{}, nil
+
+	svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
+
+	found := false
+	for _, gw := range pkg.ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
+		if pkg.ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
+			found = true
+			break
+		}
+	}
+	if found {
+		opcfgs, err := pkg.ParseReferedServiceKeys([]string{req.NamespacedName.String()})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
+		npcfgs, err := pkg.ParseReferedServiceKeys([]string{req.NamespacedName.String()})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pkg.PendingDeploys <- pkg.DeployRequest{
+			Meta: fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
+			From: &opcfgs,
+			To:   &npcfgs,
+			StatusFunc: func() {
+			},
+			Partition: "cis-c-tenant",
+		}
+
+	}
+
+	return ctrl.Result{}, nil
+
+}
+
+func handleUpsertingService(ctx context.Context, obj *v1.Service) (ctrl.Result, error) {
+
+	// opcfgs, err := pkg.ParseServicesRelatedForAll()
+	// if err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+
+	// pkg.ActiveSIGs.SetService(obj.DeepCopy())
+
+	// npcfgs, err := pkg.ParseServicesRelatedForAll()
+	// if err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+	// pkg.PendingDeploys <- pkg.DeployRequest{
+	// 	Meta: fmt.Sprintf("upserting service '%s'", utils.Keyname(obj.Namespace, obj.Name)),
+	// 	From: &opcfgs,
+	// 	To:   &npcfgs,
+	// 	StatusFunc: func() {
+	// 	},
+	// 	Partition: "cis-c-tenant",
+	// }
+
+	// return ctrl.Result{}, nil
+
+	reqnsn := utils.Keyname(obj.Namespace, obj.Name)
+	svc := pkg.ActiveSIGs.GetService(reqnsn)
+
+	found := false
+	for _, gw := range pkg.ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
+		if pkg.ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
+			found = true
+			break
+		}
+	}
+
+	if found {
+		opcfgs, err := pkg.ParseReferedServiceKeys([]string{reqnsn})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pkg.ActiveSIGs.SetService(obj.DeepCopy())
+		npcfgs, err := pkg.ParseReferedServiceKeys([]string{reqnsn})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pkg.PendingDeploys <- pkg.DeployRequest{
+			Meta: fmt.Sprintf("upserting service '%s'", reqnsn),
+			From: &opcfgs,
+			To:   &npcfgs,
+			StatusFunc: func() {
+			},
+			Partition: "cis-c-tenant",
+		}
+	}
+
+	return ctrl.Result{}, nil
+}

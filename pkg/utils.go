@@ -292,6 +292,52 @@ func (c *SIGCache) _attachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service
 	return svcs
 }
 
+func (c *SIGCache) AllAttachedServiceKeys() []string {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	svcs := []string{}
+	for _, gwc := range c.GatewayClasses {
+		for _, gw := range c._attachedGateways(gwc) {
+			for _, hr := range c._attachedHTTPRoutes(gw) {
+				svcs = append(svcs, c._attachedServiceKeys(hr)...)
+			}
+		}
+	}
+	return svcs
+}
+
+func (c *SIGCache) _attachedServiceKeys(hr *gatewayv1beta1.HTTPRoute) []string {
+	if hr == nil {
+		return []string{}
+	}
+
+	svcs := []string{}
+	for _, rl := range hr.Spec.Rules {
+		for _, br := range rl.BackendRefs {
+			ns := hr.Namespace
+			if br.Namespace != nil {
+				ns = string(*br.Namespace)
+			}
+			svcs = append(svcs, utils.Keyname(ns, string(br.Name)))
+		}
+	}
+	for _, rl := range hr.Spec.Rules {
+		for _, fl := range rl.Filters {
+			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
+				er := fl.ExtensionRef
+				if er.Group == "" && er.Kind == "Service" {
+					svcs = append(svcs, utils.Keyname(hr.Namespace, string(er.Name)))
+				}
+			}
+		}
+	}
+
+	return utils.Unified(svcs)
+}
+
 func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
 	defer utils.TimeItToPrometheus()()
 
@@ -467,6 +513,7 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 // 	}
 // }
 
+// GetNeighborGateways get neighbor gateways(itself is not included) for all gateway class.
 func (c *SIGCache) GetNeighborGateways(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
@@ -494,7 +541,7 @@ func (c *SIGCache) GetNeighborGateways(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 	return rlt
 }
 
-func (c *SIGCache) GetRootGateways(svc *v1.Service) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
@@ -502,11 +549,13 @@ func (c *SIGCache) GetRootGateways(svc *v1.Service) []*gatewayv1beta1.Gateway {
 
 	gwmap := map[string]*gatewayv1beta1.Gateway{}
 
-	hrs := c._HTTPRoutesRefsOf(svc)
-	for _, hr := range hrs {
-		gws := c._gatewayRefsOf(hr)
-		for _, gw := range gws {
-			gwmap[utils.Keyname(gw.Namespace, gw.Name)] = gw
+	for _, svc := range svcs {
+		hrs := c._HTTPRoutesRefsOf(svc)
+		for _, hr := range hrs {
+			gws := c._gatewayRefsOf(hr)
+			for _, gw := range gws {
+				gwmap[utils.Keyname(gw.Namespace, gw.Name)] = gw
+			}
 		}
 	}
 	rlt := []*gatewayv1beta1.Gateway{}
