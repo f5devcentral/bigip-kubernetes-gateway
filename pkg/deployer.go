@@ -111,3 +111,22 @@ func ModifyDbValue(bigip *f5_bigip.BIGIP) error {
 	slog.Debugf("enabing tmrouted.tmos.routing ")
 	return bigip.ModifyDbValue("tmrouted.tmos.routing", "enable")
 }
+
+func ConfigFlannel(bigip *f5_bigip.BIGIP, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress string) error {
+	slog.Debugf("adding some flannel related configs onto bigip")
+	err := bigip.CreateVxlanProfile(vxlanProfileName, vxlanPort)
+	if err != nil {
+		return err
+	}
+
+	err = bigip.CreateVxlanTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName)
+	if err != nil {
+		return err
+	}
+
+	err = bigip.CreateSelf(selfIpName, selfIpAddress, vxlanTunnelName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
