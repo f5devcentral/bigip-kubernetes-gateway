@@ -42,7 +42,7 @@ func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
 	defer c.mutex.Unlock()
 
 	if obj != nil {
-		c.GatewayClasses[utils.Keyname(obj.Namespace, obj.Name)] = obj
+		c.GatewayClasses[obj.Name] = obj
 	}
 }
 
@@ -65,13 +65,7 @@ func (c *SIGCache) SetGateway(obj *gatewayv1beta1.Gateway) {
 	defer c.mutex.Unlock()
 
 	if obj != nil {
-		keyname := utils.Keyname(obj.Namespace, obj.Name)
-		if _, f := c.GatewayClasses[string(obj.Spec.GatewayClassName)]; f {
-			slog.Debugf("set this gw %s", keyname)
-			c.Gateway[keyname] = obj
-		} else {
-			delete(c.Gateway, keyname)
-		}
+		c.Gateway[utils.Keyname(obj.Namespace, obj.Name)] = obj
 	}
 }
 
@@ -178,6 +172,29 @@ func (c *SIGCache) UnsetService(keyname string) {
 // 	return ips
 // }
 
+func (c *SIGCache) AttachedGateways(gtw *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c._attachedGateways(gtw)
+}
+
+func (c *SIGCache) _attachedGateways(gwc *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
+	if gwc == nil {
+		return []*gatewayv1beta1.Gateway{}
+	}
+
+	gws := []*gatewayv1beta1.Gateway{}
+	for _, gw := range c.Gateway {
+		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(gwc.Name) {
+			gws = append(gws, gw)
+		}
+	}
+	return gws
+}
+
 func (c *SIGCache) GatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
@@ -234,16 +251,16 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 	return hrs
 }
 
-func (c *SIGCache) ServiceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
+func (c *SIGCache) AttachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	return c._serviceRefsOf(hr)
+	return c._attachedServices(hr)
 }
 
-func (c *SIGCache) _serviceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
+func (c *SIGCache) _attachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
 	if hr == nil {
 		return []*v1.Service{}
 	}
@@ -264,7 +281,7 @@ func (c *SIGCache) _serviceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
 		for _, fl := range rl.Filters {
 			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
 				er := fl.ExtensionRef
-				if er.Group == "v1" && er.Kind == "Service" {
+				if er.Group == "" && er.Kind == "Service" {
 					if svc, ok := c.Service[utils.Keyname(hr.Namespace, string(er.Name))]; ok {
 						svcs = append(svcs, svc)
 					}
@@ -273,6 +290,52 @@ func (c *SIGCache) _serviceRefsOf(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
 		}
 	}
 	return svcs
+}
+
+func (c *SIGCache) AllAttachedServiceKeys() []string {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	svcs := []string{}
+	for _, gwc := range c.GatewayClasses {
+		for _, gw := range c._attachedGateways(gwc) {
+			for _, hr := range c._attachedHTTPRoutes(gw) {
+				svcs = append(svcs, c._attachedServiceKeys(hr)...)
+			}
+		}
+	}
+	return svcs
+}
+
+func (c *SIGCache) _attachedServiceKeys(hr *gatewayv1beta1.HTTPRoute) []string {
+	if hr == nil {
+		return []string{}
+	}
+
+	svcs := []string{}
+	for _, rl := range hr.Spec.Rules {
+		for _, br := range rl.BackendRefs {
+			ns := hr.Namespace
+			if br.Namespace != nil {
+				ns = string(*br.Namespace)
+			}
+			svcs = append(svcs, utils.Keyname(ns, string(br.Name)))
+		}
+	}
+	for _, rl := range hr.Spec.Rules {
+		for _, fl := range rl.Filters {
+			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
+				er := fl.ExtensionRef
+				if er.Group == "" && er.Kind == "Service" {
+					svcs = append(svcs, utils.Keyname(hr.Namespace, string(er.Name)))
+				}
+			}
+		}
+	}
+
+	return utils.Unified(svcs)
 }
 
 func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
@@ -305,7 +368,7 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 			for _, fl := range rl.Filters {
 				if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
 					er := fl.ExtensionRef
-					if er.Group == "v1" && er.Kind == "Service" {
+					if er.Group == "" && er.Kind == "Service" {
 						if utils.Keyname(hr.Namespace, string(er.Name)) == utils.Keyname(svc.Namespace, svc.Name) {
 							return true
 						}
@@ -332,81 +395,174 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 	return hrs
 }
 
-func (c *SIGCache) GetRelatedObjs(
-	gwObjs []*gatewayv1beta1.Gateway,
-	hrObjs []*gatewayv1beta1.HTTPRoute,
-	svcObjs []*v1.Service,
-	gwmap *map[string]*gatewayv1beta1.Gateway,
-	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
-	svcmap *map[string]*v1.Service) {
+// func (c *SIGCache) GetRelatedObjs(
+// 	gwObjs []*gatewayv1beta1.Gateway,
+// 	hrObjs []*gatewayv1beta1.HTTPRoute,
+// 	svcObjs []*v1.Service,
+// 	gwmap *map[string]*gatewayv1beta1.Gateway,
+// 	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
+// 	svcmap *map[string]*v1.Service) {
 
+// 	defer utils.TimeItToPrometheus()()
+
+// 	c.mutex.RLock()
+// 	defer c.mutex.RUnlock()
+
+// 	c._getRelatedObjs(gwObjs, hrObjs, svcObjs, gwmap, hrmap, svcmap)
+// }
+
+// func (c *SIGCache) _getRelatedObjs(
+// 	gwObjs []*gatewayv1beta1.Gateway,
+// 	hrObjs []*gatewayv1beta1.HTTPRoute,
+// 	svcObjs []*v1.Service,
+// 	gwmap *map[string]*gatewayv1beta1.Gateway,
+// 	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
+// 	svcmap *map[string]*v1.Service) {
+// 	for _, gwObj := range gwObjs {
+// 		if gwObj != nil {
+// 			name := utils.Keyname(gwObj.Namespace, gwObj.Name)
+// 			(*gwmap)[name] = c.Gateway[name]
+// 		}
+// 		hrs := c._attachedHTTPRoutes(gwObj)
+// 		for _, hr := range hrs {
+// 			name := utils.Keyname(hr.Namespace, hr.Name)
+// 			if _, ok := (*hrmap)[name]; !ok {
+// 				(*hrmap)[name] = c.HTTPRoute[name]
+// 				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}, gwmap, hrmap, svcmap)
+// 			}
+// 		}
+// 	}
+
+// 	for _, hrObj := range hrObjs {
+// 		if hrObj != nil {
+// 			name := utils.Keyname(hrObj.Namespace, hrObj.Name)
+// 			(*hrmap)[name] = c.HTTPRoute[name]
+// 		}
+// 		gws := c._gatewayRefsOf(hrObj)
+// 		for _, gw := range gws {
+// 			name := utils.Keyname(gw.Namespace, gw.Name)
+// 			if _, ok := (*gwmap)[name]; !ok {
+// 				(*gwmap)[name] = c.Gateway[name]
+// 				c._getRelatedObjs([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}, gwmap, hrmap, svcmap)
+// 			}
+// 		}
+// 		svcs := c._serviceRefsOf(hrObj)
+// 		for _, svc := range svcs {
+// 			name := utils.Keyname(svc.Namespace, svc.Name)
+// 			if _, ok := (*svcmap)[name]; !ok {
+// 				(*svcmap)[name] = c.Service[name]
+// 				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc}, gwmap, hrmap, svcmap)
+// 			}
+// 		}
+// 	}
+
+// 	for _, svcObj := range svcObjs {
+// 		if svcObj != nil {
+// 			name := utils.Keyname(svcObj.Namespace, svcObj.Name)
+// 			(*svcmap)[name] = c.Service[name]
+// 		}
+// 		hrs := c._HTTPRoutesRefsOf(svcObj)
+// 		for _, hr := range hrs {
+// 			name := utils.Keyname(hr.Namespace, hr.Name)
+// 			if _, ok := (*hrmap)[name]; !ok {
+// 				(*hrmap)[name] = c.HTTPRoute[name]
+// 				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}, gwmap, hrmap, svcmap)
+// 			}
+// 		}
+// 	}
+// }
+
+// func (c *SIGCache) GetGatewayRelated(
+// 	gwObjs []*gatewayv1beta1.Gateway,
+// 	gwmap *map[string]*gatewayv1beta1.Gateway,
+// 	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
+// 	svcmap *map[string]*v1.Service) {
+
+// 	defer utils.TimeItToPrometheus()()
+
+// 	c.mutex.RLock()
+// 	defer c.mutex.RUnlock()
+
+// 	c._getGatewayRelated(gwObjs, gwmap, hrmap, svcmap)
+// }
+
+// func (c *SIGCache) _getGatewayRelated(
+// 	gwObjs []*gatewayv1beta1.Gateway,
+// 	gwmap *map[string]*gatewayv1beta1.Gateway,
+// 	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
+// 	svcmap *map[string]*v1.Service) {
+// 	for _, gwObj := range gwObjs {
+// 		if gwObj != nil {
+// 			name := utils.Keyname(gwObj.Namespace, gwObj.Name)
+// 			(*gwmap)[name] = c.Gateway[name]
+// 		}
+// 		hrs := c._attachedHTTPRoutes(gwObj)
+// 		for _, hr := range hrs {
+// 			name := utils.Keyname(hr.Namespace, hr.Name)
+// 			if _, ok := (*hrmap)[name]; !ok {
+// 				(*hrmap)[name] = hr
+// 				svcs := c._serviceRefsOf(hr)
+// 				for _, svc := range svcs {
+// 					name := utils.Keyname(svc.Namespace, svc.Name)
+// 					if _, ok := (*svcmap)[name]; !ok {
+// 						(*svcmap)[name] = svc
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// }
+
+// GetNeighborGateways get neighbor gateways(itself is not included) for all gateway class.
+func (c *SIGCache) GetNeighborGateways(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	c._getRelatedObjs(gwObjs, hrObjs, svcObjs, gwmap, hrmap, svcmap)
+	gwmap := map[string]*gatewayv1beta1.Gateway{}
+	hrs := c._attachedHTTPRoutes(gw)
+	for _, hr := range hrs {
+		gws := c._gatewayRefsOf(hr)
+		for _, ng := range gws {
+			kn := utils.Keyname(ng.Namespace, ng.Name)
+			if _, f := gwmap[kn]; !f {
+				gwmap[kn] = ng
+			}
+		}
+	}
+
+	delete(gwmap, utils.Keyname(gw.Namespace, gw.Name))
+	rlt := []*gatewayv1beta1.Gateway{}
+	for _, gw := range gwmap {
+		rlt = append(rlt, gw)
+	}
+
+	return rlt
 }
 
-func (c *SIGCache) _getRelatedObjs(
-	gwObjs []*gatewayv1beta1.Gateway,
-	hrObjs []*gatewayv1beta1.HTTPRoute,
-	svcObjs []*v1.Service,
-	gwmap *map[string]*gatewayv1beta1.Gateway,
-	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
-	svcmap *map[string]*v1.Service) {
-	for _, gwObj := range gwObjs {
-		if gwObj != nil {
-			name := utils.Keyname(gwObj.Namespace, gwObj.Name)
-			(*gwmap)[name] = c.Gateway[name]
-		}
-		hrs := c._attachedHTTPRoutes(gwObj)
-		for _, hr := range hrs {
-			name := utils.Keyname(hr.Namespace, hr.Name)
-			if _, ok := (*hrmap)[name]; !ok {
-				(*hrmap)[name] = c.HTTPRoute[name]
-				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}, gwmap, hrmap, svcmap)
-			}
-		}
-	}
+func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayv1beta1.Gateway {
+	defer utils.TimeItToPrometheus()()
 
-	for _, hrObj := range hrObjs {
-		if hrObj != nil {
-			name := utils.Keyname(hrObj.Namespace, hrObj.Name)
-			(*hrmap)[name] = c.HTTPRoute[name]
-		}
-		gws := c._gatewayRefsOf(hrObj)
-		for _, gw := range gws {
-			name := utils.Keyname(gw.Namespace, gw.Name)
-			if _, ok := (*gwmap)[name]; !ok {
-				(*gwmap)[name] = c.Gateway[name]
-				c._getRelatedObjs([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}, gwmap, hrmap, svcmap)
-			}
-		}
-		svcs := c._serviceRefsOf(hrObj)
-		for _, svc := range svcs {
-			name := utils.Keyname(svc.Namespace, svc.Name)
-			if _, ok := (*svcmap)[name]; !ok {
-				(*svcmap)[name] = c.Service[name]
-				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc}, gwmap, hrmap, svcmap)
-			}
-		}
-	}
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 
-	for _, svcObj := range svcObjs {
-		if svcObj != nil {
-			name := utils.Keyname(svcObj.Namespace, svcObj.Name)
-			(*svcmap)[name] = c.Service[name]
-		}
-		hrs := c._HTTPRoutesRefsOf(svcObj)
+	gwmap := map[string]*gatewayv1beta1.Gateway{}
+
+	for _, svc := range svcs {
+		hrs := c._HTTPRoutesRefsOf(svc)
 		for _, hr := range hrs {
-			name := utils.Keyname(hr.Namespace, hr.Name)
-			if _, ok := (*hrmap)[name]; !ok {
-				(*hrmap)[name] = c.HTTPRoute[name]
-				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}, gwmap, hrmap, svcmap)
+			gws := c._gatewayRefsOf(hr)
+			for _, gw := range gws {
+				gwmap[utils.Keyname(gw.Namespace, gw.Name)] = gw
 			}
 		}
 	}
+	rlt := []*gatewayv1beta1.Gateway{}
+	for _, gw := range gwmap {
+		rlt = append(rlt, gw)
+	}
+	return rlt
 }
 
 func (c *SIGCache) syncCoreV1Resources(kubeClient kubernetes.Interface) error {
@@ -475,8 +631,8 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	} else {
 		for _, gwc := range gwcList.Items {
 			if gwc.Spec.ControllerName == gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
-				slog.Infof("found gatewayclass %s", utils.Keyname(gwc.Namespace, gwc.Name))
-				c.GatewayClasses[utils.Keyname(gwc.Namespace, gwc.Name)] = gwc.DeepCopy()
+				slog.Infof("found gatewayclass %s", gwc.Name)
+				c.GatewayClasses[gwc.Name] = gwc.DeepCopy()
 			} else {
 				slog.Infof("This gwc's ControllerName %s not equal to this controller. Ignore.", gwc.Spec.ControllerName)
 			}
@@ -487,13 +643,8 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 		return err
 	} else {
 		for _, gw := range gtwList.Items {
-			if _, f := c.GatewayClasses[string(gw.Spec.GatewayClassName)]; f {
-				slog.Debugf("found gateway %s", utils.Keyname(gw.Namespace, gw.Name))
-				c.Gateway[utils.Keyname(gw.Namespace, gw.Name)] = gw.DeepCopy()
-			} else {
-				slog.Infof("This gw's GatewayClassName %s not belong to this controller. Ignore.", gw.Spec.GatewayClassName)
-				delete(c.Gateway, utils.Keyname(gw.Namespace, gw.Name))
-			}
+			slog.Debugf("found gateway %s", utils.Keyname(gw.Namespace, gw.Name))
+			c.Gateway[utils.Keyname(gw.Namespace, gw.Name)] = gw.DeepCopy()
 		}
 	}
 	if err := mgr.GetCache().List(context.TODO(), &hrList, &client.ListOptions{}); err != nil {

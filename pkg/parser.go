@@ -6,11 +6,135 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
-	v1 "k8s.io/api/core/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
+// func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, svcObjs []*v1.Service) (map[string]interface{}, error) {
+// 	defer utils.TimeItToPrometheus()()
+
+// 	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
+// 	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
+
+// 	rlt := map[string]interface{}{}
+// 	for _, gw := range gwmap {
+// 		if cfgs, err := ParseGateway(gw); err != nil {
+// 			return map[string]interface{}{}, err
+// 		} else {
+// 			for k, v := range cfgs {
+// 				rlt[k] = v
+// 			}
+// 		}
+// 	}
+// 	for _, hr := range hrmap {
+// 		if cfgs, err := ParseHTTPRoute(hr); err != nil {
+// 			return map[string]interface{}{}, err
+// 		} else {
+// 			for k, v := range cfgs {
+// 				rlt[k] = v
+// 			}
+// 		}
+// 	}
+
+// 	return map[string]interface{}{
+// 		"": rlt,
+// 	}, nil
+// }
+
+func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
+	defer utils.TimeItToPrometheus()()
+
+	if ActiveSIGs.GetGatewayClass(className) == nil {
+		return map[string]interface{}{}, nil
+	}
+	// gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
+	// ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
+
+	cgwObjs := []*gatewayv1beta1.Gateway{}
+	for _, gw := range gwObjs {
+		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(className) {
+			cgwObjs = append(cgwObjs, gw)
+		}
+	}
+
+	// return ParseGatewayRelated(cgwObjs)
+
+	rlt := map[string]interface{}{}
+	for _, gw := range cgwObjs {
+		if cfgs, err := parseGateway(gw); err != nil {
+			return map[string]interface{}{}, err
+		} else {
+			for k, v := range cfgs {
+				rlt[k] = v
+			}
+		}
+		hrs := ActiveSIGs.AttachedHTTPRoutes(gw)
+		for _, hr := range hrs {
+			if cfgs, err := parseHTTPRoute(className, hr); err != nil {
+				return map[string]interface{}{}, err
+			} else {
+				for k, v := range cfgs {
+					rlt[k] = v
+				}
+			}
+		}
+	}
+	return map[string]interface{}{
+		"": rlt,
+	}, nil
+}
+
+// ParseServicesRelatedForAll parse all refered services
+func ParseServicesRelatedForAll() (map[string]interface{}, error) {
+
+	// all services that are referenced but may not exist
+	svcs := ActiveSIGs.AllAttachedServiceKeys()
+
+	return ParseReferedServiceKeys(svcs)
+}
+
+func ParseReferedServiceKeys(svcs []string) (map[string]interface{}, error) {
+	rlt := map[string]interface{}{}
+	for _, svc := range svcs {
+
+		ns := strings.Split(svc, "/")[0]
+		n := strings.Split(svc, "/")[1]
+
+		name := strings.Join([]string{ns, n}, ".")
+		rlt["ltm/pool/"+name] = map[string]interface{}{
+			"name":    name,
+			"monitor": "min 1 of tcp",
+			"members": []interface{}{},
+
+			// "minActiveMembers": 0,
+			// TODO: there's at least one field for PATCH a pool. or we may need to fix that
+			// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
+		}
+		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
+			return rlt, err
+		} else {
+			rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
+		}
+
+		if mon, err := parseMonitorFrom(ns, n); err != nil {
+			return rlt, err
+		} else {
+			rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
+		}
+
+		if err := parseArpsFrom(ns, n, rlt); err != nil {
+			return rlt, err
+		}
+		if err := parseNodesFrom(ns, n, rlt); err != nil {
+			return rlt, err
+		}
+	}
+
+	return map[string]interface{}{
+		"": rlt,
+	}, nil
+}
+
+func parseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
 	if hr == nil {
@@ -18,18 +142,18 @@ func ParseHTTPRoute(hr *gatewayv1beta1.HTTPRoute) (map[string]interface{}, error
 	}
 
 	rlt := map[string]interface{}{}
-	if err := parsePoolsFrom(hr, rlt); err != nil {
-		return map[string]interface{}{}, err
-	}
+	// if err := parsePoolsFrom(hr, rlt); err != nil {
+	// 	return map[string]interface{}{}, err
+	// }
 
-	if err := parseiRulesFrom(hr, rlt); err != nil {
+	if err := parseiRulesFrom(className, hr, rlt); err != nil {
 		return map[string]interface{}{}, err
 	}
 
 	return rlt, nil
 }
 
-func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
+func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
 	if gw == nil {
@@ -104,101 +228,109 @@ func ParseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	return rlt, nil
 }
 
-func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, svcObjs []*v1.Service) (map[string]interface{}, error) {
-	defer utils.TimeItToPrometheus()()
+// func ParseGatewayRelated(gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
+// 	defer utils.TimeItToPrometheus()()
 
-	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
+// 	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
+// 	ActiveSIGs.GetGatewayRelated(gwObjs, &gwmap, &hrmap, &svcmap)
 
-	rlt := map[string]interface{}{}
-	for _, gw := range gwmap {
-		if cfgs, err := ParseGateway(gw); err != nil {
-			return map[string]interface{}{}, err
-		} else {
-			for k, v := range cfgs {
-				rlt[k] = v
-			}
-		}
-	}
-	for _, hr := range hrmap {
-		if cfgs, err := ParseHTTPRoute(hr); err != nil {
-			return map[string]interface{}{}, err
-		} else {
-			for k, v := range cfgs {
-				rlt[k] = v
-			}
-		}
-	}
+// 	rlt := map[string]interface{}{}
+// 	for _, gw := range gwmap {
+// 		if cfgs, err := ParseGateway(gw); err != nil {
+// 			return map[string]interface{}{}, err
+// 		} else {
+// 			for k, v := range cfgs {
+// 				rlt[k] = v
+// 			}
+// 		}
+// 	}
 
-	return map[string]interface{}{
-		"": rlt,
-	}, nil
-}
+// 	// TODO: tune it.
+// 	className := ""
+// 	if len(gwObjs) == 0 {
+// 		return map[string]interface{}{}, fmt.Errorf("should not happen here")
+// 	} else {
+// 		className = string(gwObjs[0].Spec.GatewayClassName)
+// 	}
+// 	for _, hr := range hrmap {
+// 		if cfgs, err := ParseHTTPRoute(className, hr); err != nil {
+// 			return map[string]interface{}{}, err
+// 		} else {
+// 			for k, v := range cfgs {
+// 				rlt[k] = v
+// 			}
+// 		}
+// 	}
 
-func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
+// 	return map[string]interface{}{
+// 		"": rlt,
+// 	}, nil
+// }
 
-	creatPool := func(ns, n string, rlt map[string]interface{}) error {
-		name := strings.Join([]string{ns, n}, ".")
-		rlt["ltm/pool/"+name] = map[string]interface{}{
-			"name":    name,
-			"monitor": "min 1 of tcp",
-			"members": []interface{}{},
+// func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
 
-			// "minActiveMembers": 0,
-			// TODO: there's at least one field for PATCH a pool. or we may need to fix that
-			// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
-		}
-		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
-			return err
-		} else {
-			rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
-		}
+// 	creatPool := func(ns, n string, rlt map[string]interface{}) error {
+// 		name := strings.Join([]string{ns, n}, ".")
+// 		rlt["ltm/pool/"+name] = map[string]interface{}{
+// 			"name":    name,
+// 			"monitor": "min 1 of tcp",
+// 			"members": []interface{}{},
 
-		if mon, err := parseMonitorFrom(ns, n); err != nil {
-			return err
-		} else {
-			rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
-		}
+// 			// "minActiveMembers": 0,
+// 			// TODO: there's at least one field for PATCH a pool. or we may need to fix that
+// 			// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
+// 		}
+// 		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
+// 			return err
+// 		} else {
+// 			rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
+// 		}
 
-		if err := parseArpsFrom(ns, n, rlt); err != nil {
-			return err
-		}
-		if err := parseNodesFrom(ns, n, rlt); err != nil {
-			return err
-		}
-		return nil
-	}
+// 		if mon, err := parseMonitorFrom(ns, n); err != nil {
+// 			return err
+// 		} else {
+// 			rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
+// 		}
 
-	for _, rl := range hr.Spec.Rules {
-		for _, br := range rl.BackendRefs {
-			ns := hr.Namespace
-			if br.Namespace != nil {
-				ns = string(*br.Namespace)
-			}
-			if err := creatPool(ns, string(br.Name), rlt); err != nil {
-				return err
-			}
-		}
-	}
+// 		if err := parseArpsFrom(ns, n, rlt); err != nil {
+// 			return err
+// 		}
+// 		if err := parseNodesFrom(ns, n, rlt); err != nil {
+// 			return err
+// 		}
+// 		return nil
+// 	}
 
-	// pools from ExtensionRef as well.
-	for _, rl := range hr.Spec.Rules {
-		for _, fl := range rl.Filters {
-			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
-				er := fl.ExtensionRef
-				if er.Group != "v1" || er.Kind != "Service" {
-					return fmt.Errorf("resource %s of '%s' not supported", er.Name, utils.Keyname(string(er.Group), string(er.Kind)))
-				} else {
-					if err := creatPool(hr.Namespace, string(er.Name), rlt); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
+// 	for _, rl := range hr.Spec.Rules {
+// 		for _, br := range rl.BackendRefs {
+// 			ns := hr.Namespace
+// 			if br.Namespace != nil {
+// 				ns = string(*br.Namespace)
+// 			}
+// 			if err := creatPool(ns, string(br.Name), rlt); err != nil {
+// 				return err
+// 			}
+// 		}
+// 	}
 
-	return nil
-}
+// 	// pools from ExtensionRef as well.
+// 	for _, rl := range hr.Spec.Rules {
+// 		for _, fl := range rl.Filters {
+// 			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
+// 				er := fl.ExtensionRef
+// 				if er.Group != "" || er.Kind != "Service" {
+// 					return fmt.Errorf("resource %s of '%s' not supported", er.Name, utils.Keyname(string(er.Group), string(er.Kind)))
+// 				} else {
+// 					if err := creatPool(hr.Namespace, string(er.Name), rlt); err != nil {
+// 						return err
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	return nil
+// }
 
 // TODO: find the way to set monitor
 func parseMonitorFrom(svcNamespace, svcName string) (string, error) {
@@ -275,7 +407,7 @@ func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) er
 	return nil
 }
 
-func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
+func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
 	// irules
 	name := strings.Join([]string{hr.Namespace, hr.Name}, ".")
 	hostnameConditions := []string{}
@@ -424,7 +556,7 @@ func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) e
 			case gatewayv1beta1.HTTPRouteFilterExtensionRef:
 				if er := filter.ExtensionRef; er != nil {
 					pool := fmt.Sprintf("%s.%s", hr.Namespace, er.Name)
-					filterActions = append(filterActions, fmt.Sprintf("pool /cis-c-tenant/%s", pool))
+					filterActions = append(filterActions, fmt.Sprintf("pool /%s/%s", "cis-c-tenant", pool))
 				}
 			}
 		}
@@ -437,7 +569,7 @@ func parseiRulesFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) e
 				ns = string(*br.Namespace)
 			}
 			pn := strings.Join([]string{ns, string(br.Name)}, ".")
-			pool = fmt.Sprintf("pool /cis-c-tenant/%s", pn)
+			pool = fmt.Sprintf("pool /%s/%s", "cis-c-tenant", pn)
 		}
 		rules = append(rules, fmt.Sprintf(`	
 			if { %s } {
