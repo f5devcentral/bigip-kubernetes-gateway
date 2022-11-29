@@ -128,7 +128,7 @@ def curl_verify(name, req, expected_resp):
     expected_body = expected_resp.get('body', {})
     try:
         warn(name, "requesting: %s" % req)
-        resp = requests.request(method=method, url="%s" % url, params=queries, headers=headers, json=body, allow_redirects=False)
+        resp = requests.request(method=method, url="%s" % url, params=queries, headers=headers, json=body, allow_redirects=False, timeout=2)
         try:
             resp_headers = dict(resp.headers)
             if type(expected_body) == type({}):
