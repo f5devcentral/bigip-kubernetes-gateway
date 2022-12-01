@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
@@ -84,18 +85,74 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	if !pkg.ActiveSIGs.SyncedAtStart {
+		<-time.After(100 * time.Millisecond)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	oIpAddresses := []string{}
+	nIpAddresses := []string{}
+	ocfgs := map[string]interface{}{}
+	ncfgs := map[string]interface{}{}
 
 	var obj v1.Node
-	// zlog := log.FromContext(ctx)
-	// zlog.V(1).Info("resource event: " + req.NamespacedName.String())
+	zlog := log.FromContext(ctx)
+	zlog.V(1).Info("resource event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
+			if pkg.ActiveSIGs.Mode == "calico" {
+				oIpAddresses = k8s.NodeCache.AllIpAddresses()
+				if ocfgs, err = pkg.ParseNeighsFrom("gwcBGP", "64512", "64512", oIpAddresses); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+
 			k8s.NodeCache.Unset(req.Name)
+
+			if pkg.ActiveSIGs.Mode == "calico" {
+				nIpAddresses = k8s.NodeCache.AllIpAddresses()
+
+				if ncfgs, err = pkg.ParseNeighsFrom("gwcBGP", "64512", "64512", nIpAddresses); err != nil {
+					return ctrl.Result{}, err
+				}
+
+				pkg.PendingDeploys <- pkg.DeployRequest{
+					Meta:       fmt.Sprintf("refreshing neighs for node '%s'", req.Name),
+					From:       &ocfgs,
+					To:         &ncfgs,
+					StatusFunc: func() {},
+					Partition:  "Common",
+				}
+			}
+
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
+		if pkg.ActiveSIGs.Mode == "calico" {
+			oIpAddresses = k8s.NodeCache.AllIpAddresses()
+
+			if ocfgs, err = pkg.ParseNeighsFrom("gwcBGP", "64512", "64512", oIpAddresses); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
 		k8s.NodeCache.Set(obj.DeepCopy())
+
+		if pkg.ActiveSIGs.Mode == "calico" {
+			nIpAddresses = k8s.NodeCache.AllIpAddresses()
+			if ncfgs, err = pkg.ParseNeighsFrom("gwcBGP", "64512", "64512", nIpAddresses); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			pkg.PendingDeploys <- pkg.DeployRequest{
+				Meta:       fmt.Sprintf("refreshing neighs for node '%s'", req.Name),
+				From:       &ocfgs,
+				To:         &ncfgs,
+				StatusFunc: func() {},
+				Partition:  "Common",
+			}
+		}
 	}
 	return ctrl.Result{}, nil
 }
