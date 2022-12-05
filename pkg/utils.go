@@ -24,16 +24,17 @@ func init() {
 	PendingParses = make(chan ParseRequest, 16)
 	slog = utils.SetupLog("", "debug")
 	ActiveSIGs = &SIGCache{
-		mutex:          sync.RWMutex{},
-		SyncedAtStart:  false,
-		ControllerName: "",
-		Mode:           "",
-		Gateway:        map[string]*gatewayv1beta1.Gateway{},
-		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
-		Endpoints:      map[string]*v1.Endpoints{},
-		Service:        map[string]*v1.Service{},
-		GatewayClasses: map[string]*gatewayv1beta1.GatewayClass{},
-		Bigip:          nil,
+		mutex:           sync.RWMutex{},
+		SyncedAtStart:   false,
+		ControllerName:  "",
+		Mode:            "",
+		VxlanTunnelName: "",
+		Gateway:         map[string]*gatewayv1beta1.Gateway{},
+		HTTPRoute:       map[string]*gatewayv1beta1.HTTPRoute{},
+		Endpoints:       map[string]*v1.Endpoints{},
+		Service:         map[string]*v1.Service{},
+		GatewayClasses:  map[string]*gatewayv1beta1.GatewayClass{},
+		Bigip:           nil,
 		// Node:      map[string]*v1.Node{},
 	}
 }

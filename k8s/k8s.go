@@ -127,3 +127,24 @@ func (ns *Nodes) AllIpAddresses() []string {
 	}
 	return rlt
 }
+
+func (ns *Nodes) AllIpToMac() (map[string]string, map[string]string) {
+	NodeCache.mutex <- true
+	defer func() { <-NodeCache.mutex }()
+
+	rlt4 := map[string]string{}
+	rlt6 := map[string]string{}
+
+	for _, n := range ns.Items {
+		if len(n.IpAddr) > 0 && len(n.MacAddr) > 0 {
+			slog.Infof("n.IpAddress is %s:", n.IpAddr)
+			rlt4[n.IpAddr] = n.MacAddr
+		}
+		if len(n.IpAddrV6) > 0 && len(n.MacAddrV6) > 0 {
+			slog.Infof("n.IpAddrV6 is %s:", n.IpAddrV6)
+			rlt6[n.IpAddrV6] = n.MacAddrV6
+		}
+
+	}
+	return rlt4, rlt6
+}

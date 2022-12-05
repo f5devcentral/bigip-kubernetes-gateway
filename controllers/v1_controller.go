@@ -95,6 +95,11 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	ocfgs := map[string]interface{}{}
 	ncfgs := map[string]interface{}{}
 
+	oIpToMacV4 := map[string]string{}
+	// oIpToMacV6 := map[string]string{}
+	nIpToMacV4 := map[string]string{}
+	// nIpToMacV6 := map[string]string{}
+
 	var obj v1.Node
 	zlog := log.FromContext(ctx)
 	zlog.V(1).Info("resource event: " + req.NamespacedName.String())
@@ -137,6 +142,13 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			}
 		}
 
+		if pkg.ActiveSIGs.Mode == "flannel" {
+			oIpToMacV4, _ = k8s.NodeCache.AllIpToMac()
+			if ocfgs, err = pkg.ParseFdbsFrom(pkg.ActiveSIGs.VxlanTunnelName, oIpToMacV4); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
 		k8s.NodeCache.Set(obj.DeepCopy())
 
 		if pkg.ActiveSIGs.Mode == "calico" {
@@ -145,13 +157,20 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				return ctrl.Result{}, err
 			}
 
-			pkg.PendingDeploys <- pkg.DeployRequest{
-				Meta:       fmt.Sprintf("refreshing neighs for node '%s'", req.Name),
-				From:       &ocfgs,
-				To:         &ncfgs,
-				StatusFunc: func() {},
-				Partition:  "Common",
+		}
+
+		if pkg.ActiveSIGs.Mode == "flannel" {
+			nIpToMacV4, _ = k8s.NodeCache.AllIpToMac()
+			if ncfgs, err = pkg.ParseFdbsFrom(pkg.ActiveSIGs.VxlanTunnelName, nIpToMacV4); err != nil {
+				return ctrl.Result{}, err
 			}
+		}
+		pkg.PendingDeploys <- pkg.DeployRequest{
+			Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),
+			From:       &ocfgs,
+			To:         &ncfgs,
+			StatusFunc: func() {},
+			Partition:  "Common",
 		}
 	}
 	return ctrl.Result{}, nil
