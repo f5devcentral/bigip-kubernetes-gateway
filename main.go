@@ -92,13 +92,13 @@ func main() {
 	flag.StringVar(&credsDir, "credentials-directory", "", "Optional, directory that contains the BIG-IP username,"+
 		"password, and/or url files. To be used instead of username, password, and/or url arguments.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
-	flag.StringVar(&mode, "mode", "flannel", "if set to calico or flannel, will make some related configs onto bigip automatically.")
+	flag.StringVar(&mode, "mode", "", "if set to calico or flannel, will make some related configs onto bigip automatically.")
 	flag.StringVar(&vxlanProfileName, "vxlan-profile-name", "fl-vxlan", "vxlan profile name on bigip.")
 	flag.StringVar(&vxlanPort, "vxlan-port", "8472", "port number in the vxlan profile.")
 	flag.StringVar(&vxlanTunnelName, "vxlan-tunnel-name", "fl-vxlan", "vxlan tunnel name on bigip.")
-	flag.StringVar(&vxlanLocalAddress, "vxlan-local-address", "9.4.4.4", "local address in the vxlan tunnel. e.g. 192.168.2.100")
+	flag.StringVar(&vxlanLocalAddress, "vxlan-local-address", "", "local address in the vxlan tunnel. e.g. 192.168.2.100")
 	flag.StringVar(&selfIpName, "selfip-name", "flannel-self", "flannel selfip name.")
-	flag.StringVar(&selfIpAddress, "selfip-address", "5.5.5.5/28", "flannel selfip ip address. e.g. 192.168.1.100/24")
+	flag.StringVar(&selfIpAddress, "selfip-address", "", "flannel selfip ip address. e.g. 192.168.1.100/24")
 
 	opts := zap.Options{
 		Development: true,
@@ -108,6 +108,7 @@ func main() {
 
 	pkg.ActiveSIGs.ControllerName = controllerName
 	pkg.ActiveSIGs.Mode = mode
+	pkg.ActiveSIGs.VxlanTunnelName = vxlanTunnelName
 
 	if (len(bigipUrl) == 0 || len(bigipUsername) == 0 ||
 		len(bigipPassword) == 0) && len(credsDir) == 0 {
