@@ -34,7 +34,6 @@ func init() {
 		Endpoints:       map[string]*v1.Endpoints{},
 		Service:         map[string]*v1.Service{},
 		GatewayClasses:  map[string]*gatewayv1beta1.GatewayClass{},
-		Bigip:           nil,
 		// Node:      map[string]*v1.Node{},
 	}
 }
