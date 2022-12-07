@@ -2,7 +2,9 @@
 
 Integrating BIG-IP as implementation provider for SIGNetworks gateway.
 
-See https://gateway-api.f5se.io for more information
+See https://gateway-api.f5se.io for more information.
+
+For a list of supported Gateway API resources and features, see the [Gateway API Compatibility](./docs/gateway-api-compatibility.md) doc.
 
 ## Support
 
