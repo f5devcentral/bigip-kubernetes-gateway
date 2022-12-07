@@ -22,15 +22,17 @@ type ParseRequest struct {
 }
 
 type SIGCache struct {
-	mutex          sync.RWMutex
-	SyncedAtStart  bool
-	ControllerName string
-	Gateway        map[string]*gatewayv1beta1.Gateway
-	HTTPRoute      map[string]*gatewayv1beta1.HTTPRoute
-	Endpoints      map[string]*v1.Endpoints
-	Service        map[string]*v1.Service
-	GatewayClasses map[string]*gatewayv1beta1.GatewayClass
-	Bigip          *f5_bigip.BIGIP
+	mutex           sync.RWMutex
+	SyncedAtStart   bool
+	ControllerName  string
+	Mode            string
+	VxlanTunnelName string
+	Gateway         map[string]*gatewayv1beta1.Gateway
+	HTTPRoute       map[string]*gatewayv1beta1.HTTPRoute
+	Endpoints       map[string]*v1.Endpoints
+	Service         map[string]*v1.Service
+	GatewayClasses  map[string]*gatewayv1beta1.GatewayClass
+	Bigip           *f5_bigip.BIGIP
 	// Node      map[string]*v1.Node
 }
 
