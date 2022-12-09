@@ -23,7 +23,6 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,35 +68,6 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	} else {
 		ngwc := obj.DeepCopy()
-		// TODO: add logic more here. but don't want to compare configmap modifications and execute each time?
-		// create partiton in the bigip here since we consider gwc name to be partiton name
-		if ngwc.Spec.ParametersRef != nil {
-			if string(ngwc.Spec.ParametersRef.Group) != "" ||
-				string(ngwc.Spec.ParametersRef.Kind) != "ConfigMap" {
-				return ctrl.Result{}, fmt.Errorf("not supported parameter ref type: %v/%v",
-					ngwc.Spec.ParametersRef.Group, ngwc.Spec.ParametersRef.Kind)
-			}
-
-			if ngwc.Spec.ParametersRef.Namespace == nil {
-				zlog.V(1).Info("parameterRef's namespace cannot be nil")
-				return ctrl.Result{}, err
-			}
-
-			key := client.ObjectKey{
-				Namespace: string(*ngwc.Spec.ParametersRef.Namespace),
-				Name:      ngwc.Spec.ParametersRef.Name,
-			}
-
-			cm := &v1.ConfigMap{}
-			if err := r.Get(ctx, key, cm); err != nil {
-				return ctrl.Result{}, err
-			} else {
-				zlog.V(1).Info("to handle configmap: " + utils.Keyname(cm.Namespace, cm.Name))
-
-				// TODO: add more config for bigip here
-				// e.g. pkg.ActiveSIGs.Bigip.CreateVxlanTunnel(cm.Data["flannel_vxlan_tunnel_name"], cm.Data["flannel_vxlan_tunnel_port"])
-			}
-		}
 
 		ngwc.Status.Conditions = []metav1.Condition{
 			{
