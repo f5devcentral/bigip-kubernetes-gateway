@@ -22,7 +22,6 @@ import (
 func init() {
 	PendingDeploys = make(chan DeployRequest, 16)
 	PendingParses = make(chan ParseRequest, 16)
-	slog = utils.SetupLog("", "debug")
 	ActiveSIGs = &SIGCache{
 		mutex:           sync.RWMutex{},
 		SyncedAtStart:   false,
@@ -568,6 +567,7 @@ func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayv1beta1.Gateway
 
 func (c *SIGCache) syncCoreV1Resources(kubeClient kubernetes.Interface) error {
 	defer utils.TimeItToPrometheus()()
+	slog := utils.LogFromContext(context.TODO())
 
 	if epsList, err := kubeClient.CoreV1().Endpoints(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
 		return err
@@ -599,6 +599,7 @@ func (c *SIGCache) syncCoreV1Resources(kubeClient kubernetes.Interface) error {
 
 func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	defer utils.TimeItToPrometheus()()
+	slog := utils.LogFromContext(context.TODO())
 
 	checkAndWaitCacheStarted := func() error {
 		var gtwList gatewayv1beta1.GatewayList
