@@ -23,6 +23,7 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
+	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,6 +48,7 @@ type HttpRouteReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	zlog := log.FromContext(ctx)
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)
 		return ctrl.Result{Requeue: true}, nil
@@ -59,14 +61,14 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
 			defer pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
-			return handleDeletingHTTPRoute(ctx, req)
+			return handleDeletingHTTPRoute(lctx, req)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
 		// upsert resources
 		defer pkg.ActiveSIGs.SetHTTPRoute(&obj)
-		return handleUpsertingHTTPRoute(ctx, &obj)
+		return handleUpsertingHTTPRoute(lctx, &obj)
 	}
 }
 
@@ -138,6 +140,7 @@ func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result
 			StatusFunc: func() {
 			},
 			Partition: dr.Partition,
+			Context:   ctx,
 		}
 	}
 
@@ -148,6 +151,7 @@ func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result
 		StatusFunc: func() {
 		},
 		Partition: "cis-c-tenant",
+		Context:   ctx,
 	}
 
 	return ctrl.Result{}, nil
@@ -215,6 +219,7 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 		StatusFunc: func() {
 		},
 		Partition: "cis-c-tenant",
+		Context:   ctx,
 	}
 
 	for _, dr := range drs {
@@ -225,6 +230,7 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 			StatusFunc: func() {
 			},
 			Partition: dr.Partition,
+			Context:   ctx,
 		}
 	}
 

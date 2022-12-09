@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 
-	"gitee.com/zongzw/f5-bigip-rest/utils"
-
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -14,8 +12,6 @@ func init() {
 		Items: map[string]*K8Node{},
 		mutex: make(chan bool, 1),
 	}
-
-	slog = utils.SetupLog("", "debug")
 }
 
 func (ns *Nodes) Set(n *v1.Node) error {

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,7 +49,7 @@ type GatewayReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	zlog := log.FromContext(ctx)
-
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)
 		return ctrl.Result{Requeue: true}, nil
@@ -60,14 +61,14 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
 			defer pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
-			return handleDeletingGateway(ctx, req)
+			return handleDeletingGateway(lctx, req)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
 		// upsert resources
 		defer pkg.ActiveSIGs.SetGateway(&obj)
-		return handleUpsertingGateway(ctx, &obj)
+		return handleUpsertingGateway(lctx, &obj)
 	}
 }
 
@@ -114,6 +115,7 @@ func handleDeletingGateway(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 			// do something
 		},
 		Partition: string(gw.Spec.GatewayClassName),
+		Context:   ctx,
 	}
 
 	pkg.PendingDeploys <- pkg.DeployRequest{
@@ -124,6 +126,7 @@ func handleDeletingGateway(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 			// do something
 		},
 		Partition: "cis-c-tenant",
+		Context:   ctx,
 	}
 	return ctrl.Result{}, nil
 }
@@ -177,6 +180,7 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 				// do something
 			},
 			Partition: "cis-c-tenant",
+			Context:   ctx,
 		}
 
 		pkg.PendingDeploys <- pkg.DeployRequest{
@@ -187,6 +191,7 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 				// do something
 			},
 			Partition: string(ngw.Spec.GatewayClassName),
+			Context:   ctx,
 		}
 		return ctrl.Result{}, nil
 
@@ -216,6 +221,7 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 				// do something
 			},
 			Partition: "cis-c-tenant",
+			Context:   ctx,
 		}
 
 		ocfgs1, err = pkg.ParseGatewayRelatedForClass(string(ogw.Spec.GatewayClassName), append(ngs, ogw))
@@ -234,6 +240,7 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 				// do something
 			},
 			Partition: string(ogw.Spec.GatewayClassName),
+			Context:   ctx,
 		}
 
 		ocfgs2, err = pkg.ParseGatewayRelatedForClass(string(ngw.Spec.GatewayClassName), ngs)
@@ -253,6 +260,7 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 				// do something
 			},
 			Partition: string(ngw.Spec.GatewayClassName),
+			Context:   ctx,
 		}
 
 		return ctrl.Result{}, nil
