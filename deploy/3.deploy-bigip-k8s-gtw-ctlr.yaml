@@ -1,5 +1,32 @@
 ---
 
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bigip-gwapi-cm
+  namespace: kube-system
+data:
+  bigip-k8s-gw-conf.yaml: |
+    bigips:
+      - mgmtIpAddress: "10.50.17.104"
+        vxlanProfileName: "fl-vxlan"
+        vxlanPort: "8472"
+        vxlanLocalAddress: "4.4.4.4"
+        selfIpName: "flannel-self"
+        selfIpAddress: "5.5.5.5/28"
+        url: "https://10.50.17.104:8443"
+        username: "admin"
+      - mgmtIpAddress: "10.50.15.173"
+        vxlanProfileName: "fl-vxlan"
+        vxlanPort: "8472"
+        vxlanLocalAddress: "4.4.4.5"
+        selfIpName: "flannel-self"
+        selfIpAddress: "5.5.5.6/28"
+        url: "https://10.50.15.173:8443"
+        username: "admin"
+
+---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,36 +45,42 @@ spec:
     spec:
       serviceAccountName: k8s-bigip-ctlr
       nodeSelector:
-        node-role.kubernetes.io/controlplane: "true"
+        node-role.kubernetes.io/control-plane: "true"
         # node-role.kubernetes.io/master: "true"
       containers:
         # kubectl logs -f deployment/bigip-kubernetes-gateway -c bigip-kubernetes-gateway-pod -n kube-system
         - name: bigip-kubernetes-gateway-pod
-          image: zongzw/bigip-kubernetes-gateway:latest-20221115-162758
+          image: jeffreycoho/bigip-kubernetes-gateway:12060066-20221206-153736
           imagePullPolicy: IfNotPresent
-          env:
-            - name: BIGIP_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: bigip-login
-                  key: username
-            - name: BIGIP_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: bigip-login
-                  key: password
-            - name: BIGIP_URL
-              valueFrom:
-                secretKeyRef:
-                  name: bigip-login
-                  key: url
+          # env:
+          #   - name: BIGIP_PASSWORD
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: bigip-login
+          #         key: password
           command: ["/bigip-kubernetes-gateway-controller-linux"]
           args: [
-            "--bigip-username=$(BIGIP_USERNAME)",
-            "--bigip-password=$(BIGIP_PASSWORD)",
-            "--bigip-url=$(BIGIP_URL)",
-            "--gateway-class=bigip"
+            # "--bigip-password=p@ssw0rd123",
+            "--controller-name=f5.io/gateway-controller-name",
+            "--mode=flannel",
+            "--vxlan-tunnel-name=fl-vxlan",
+            "--bigip-conf-directory=/bigip-gw",
+            "--credentials-directory=/creds",
           ]
+          volumeMounts:
+            - name: bigip-creds
+              mountPath: "/creds"
+              readOnly: true
+            - name: bigip-config
+              mountPath: /bigip-gw
+              readOnly: true
+      volumes:
+        - name: bigip-creds
+          secret:
+            secretName: bigip-login
+        - name: bigip-config
+          configMap:
+            name: bigip-gwapi-cm
 
 ---
 

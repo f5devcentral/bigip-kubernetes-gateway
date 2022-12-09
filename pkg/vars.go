@@ -5,8 +5,9 @@ import (
 )
 
 var (
-	PendingDeploys chan DeployRequest
-	PendingParses  chan ParseRequest
-	slog           utils.SLOG
-	ActiveSIGs     *SIGCache
+	PendingDeploys  chan DeployRequest
+	PendingParses   chan ParseRequest
+	slog            utils.SLOG
+	ActiveSIGs      *SIGCache
+	AllBigipConfigs BigipConfigs
 )

@@ -32,7 +32,7 @@ type SIGCache struct {
 	Endpoints       map[string]*v1.Endpoints
 	Service         map[string]*v1.Service
 	GatewayClasses  map[string]*gatewayv1beta1.GatewayClass
-	Bigip           *f5_bigip.BIGIP
+	Bigips          []*f5_bigip.BIGIP
 	// Node      map[string]*v1.Node
 }
 
@@ -42,3 +42,20 @@ type DepNode struct {
 }
 
 type DepTrees []*DepNode
+
+type BigipConfig struct {
+	MgmtIpAddress    string `mapstructure:"mgmtIpAddress"`
+	VxlanProfileName string `mapstructure:"vxlanProfileName"`
+	VxlanPort        string `mapstructure:"vxlanPort"`
+	// VxlanTunnelName   string `mapstructure:"vxlanTunnelName"`
+	VxlanLocalAddress string `mapstructure:"vxlanLocalAddress"`
+	SelfIpName        string `mapstructure:"selfIpName"`
+	SelfIpAddress     string `mapstructure:"selfIpAddress"`
+	Url               string `mapstructure:"url"`
+	Username          string `mapstructure:"username"`
+}
+
+type BigipConfigs struct {
+	// maybe add more items if needed
+	Bigips []BigipConfig `mapstructure:"bigips"`
+}
