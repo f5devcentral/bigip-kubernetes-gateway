@@ -88,19 +88,22 @@ func deploy(bigip *f5_bigip.BIGIP, partition string, ocfgs, ncfgs *map[string]in
 // 	return &ocfgsPool, &ncfgsPool, nil
 // }
 
-func Deployer(stopCh chan struct{}, bigip *f5_bigip.BIGIP) {
+func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 	for {
 		select {
 		case <-stopCh:
 			return
 		case r := <-PendingDeploys:
 			slog.Debugf("Processing request: %s", r.Meta)
-			err := deploy(bigip, r.Partition, r.From, r.To)
-			if err != nil {
-				// report the error to status or ...
-				slog.Errorf("failed to do deployment: %s", err.Error())
-			} else {
-				r.StatusFunc()
+			for _, bigip := range bigips {
+				err := deploy(bigip, r.Partition, r.From, r.To)
+				if err != nil {
+					// report the error to status or ...
+					slog.Errorf("failed to do deployment: %s", err.Error())
+				} else {
+					r.StatusFunc()
+				}
+
 			}
 		}
 	}

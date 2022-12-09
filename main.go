@@ -20,7 +20,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"strings"
 
@@ -29,6 +28,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/spf13/viper"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -66,18 +66,12 @@ func main() {
 		metricsAddr          string
 		enableLeaderElection bool
 		probeAddr            string
-		bigipUrl             string
-		bigipUsername        string
 		bigipPassword        string
 		credsDir             string
+		bigipConfDir         string
 		controllerName       string
 		mode                 string
-		vxlanProfileName     string
-		vxlanPort            string
 		vxlanTunnelName      string
-		vxlanLocalAddress    string
-		selfIpName           string
-		selfIpAddress        string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -86,19 +80,13 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
-	flag.StringVar(&bigipUrl, "bigip-url", "", "The BIG-IP management IP address for provision resources.")
-	flag.StringVar(&bigipUsername, "bigip-username", "admin", "The BIG-IP username for connection.")
 	flag.StringVar(&bigipPassword, "bigip-password", "", "The BI-IP password for connection.")
-	flag.StringVar(&credsDir, "credentials-directory", "", "Optional, directory that contains the BIG-IP username,"+
-		"password, and/or url files. To be used instead of username, password, and/or url arguments.")
+	flag.StringVar(&credsDir, "credentials-directory", "/creds", "Optional, directory that contains the BIG-IP "+
+		"password file. To be used instead of bigip-password arguments.")
+	flag.StringVar(&bigipConfDir, "bigip-conf-directory", "/bigip-gw", "Directory of bigip-k8s-gw-conf.yaml file.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
 	flag.StringVar(&mode, "mode", "", "if set to calico or flannel, will make some related configs onto bigip automatically.")
-	flag.StringVar(&vxlanProfileName, "vxlan-profile-name", "fl-vxlan", "vxlan profile name on bigip.")
-	flag.StringVar(&vxlanPort, "vxlan-port", "8472", "port number in the vxlan profile.")
 	flag.StringVar(&vxlanTunnelName, "vxlan-tunnel-name", "fl-vxlan", "vxlan tunnel name on bigip.")
-	flag.StringVar(&vxlanLocalAddress, "vxlan-local-address", "", "local address in the vxlan tunnel. e.g. 192.168.2.100")
-	flag.StringVar(&selfIpName, "selfip-name", "flannel-self", "flannel selfip name.")
-	flag.StringVar(&selfIpAddress, "selfip-address", "", "flannel selfip ip address. e.g. 192.168.1.100/24")
 
 	opts := zap.Options{
 		Development: true,
@@ -106,25 +94,71 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	utils.Initialize("debug")
+
 	pkg.ActiveSIGs.ControllerName = controllerName
 	pkg.ActiveSIGs.Mode = mode
+	// would want these 2 tunnel to be the same name so that we are configuing same fdb staff onto bigip
 	pkg.ActiveSIGs.VxlanTunnelName = vxlanTunnelName
 
-	if (len(bigipUrl) == 0 || len(bigipUsername) == 0 ||
-		len(bigipPassword) == 0) && len(credsDir) == 0 {
+	if len(bigipPassword) == 0 && len(credsDir) == 0 {
 		err := fmt.Errorf("Missing BIG-IP credentials info.")
 		setupLog.Error(err, "Missing BIG-IP credentials info: %s", err.Error())
 		panic(err)
 	}
-
-	if err := getCredentials(bigipUrl, bigipUsername, bigipPassword, credsDir); err != nil {
+	if err := getCredentials(&bigipPassword, credsDir); err != nil {
 		panic(err)
 	}
 
-	bigip := f5_bigip.Initialize(bigipUrl, bigipUsername, bigipPassword, "debug")
-	utils.Initialize("debug")
+	viper1 := viper.New()
+	viper1.AddConfigPath(bigipConfDir)
+	viper1.SetConfigName("bigip-k8s-gw-conf")
+	viper1.SetConfigType("yaml")
 
-	pkg.ActiveSIGs.Bigip = bigip
+	viper1.ReadInConfig()
+
+	initConfig := func() {
+		err := viper1.Unmarshal(&pkg.AllBigipConfigs)
+		if err != nil {
+			panic(fmt.Sprintf("yaml file unmarshal err: %v", err))
+		}
+
+		for _, bigipconfig := range pkg.AllBigipConfigs.Bigips {
+			url := bigipconfig.Url
+			setupLog.Info("url is %s", url)
+			username := bigipconfig.Username
+			setupLog.Info("username is %s", username)
+
+			setupLog.Info("bigipPassword is %s", bigipPassword)
+			bigip := f5_bigip.Initialize(url, username, bigipPassword, "debug")
+			pkg.ActiveSIGs.Bigips = append(pkg.ActiveSIGs.Bigips, bigip)
+		}
+
+		if mode == "calico" {
+			for _, each := range pkg.ActiveSIGs.Bigips {
+				pkg.ModifyDbValue(each)
+			}
+		} else if mode == "flannel" {
+			for i, each := range pkg.ActiveSIGs.Bigips {
+				setupLog.Info("URL is %s", each.URL)
+				vxlanProfileName := pkg.AllBigipConfigs.Bigips[i].VxlanProfileName
+				setupLog.Info("vxlanProfileName is : %s", vxlanProfileName)
+				vxlanPort := pkg.AllBigipConfigs.Bigips[i].VxlanPort
+				// vxlanTunnelName := pkg.AllBigipConfigs.Bigips[i].VxlanTunnelName
+				vxlanLocalAddress := pkg.AllBigipConfigs.Bigips[i].VxlanLocalAddress
+				selfIpName := pkg.AllBigipConfigs.Bigips[i].SelfIpName
+				selfIpAddress := pkg.AllBigipConfigs.Bigips[i].SelfIpAddress
+
+				err := pkg.ConfigFlannel(each, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress)
+				if err != nil {
+					setupLog.Error(err, "Check. some flannel related configs onto bigip unsuccessful: %s", err.Error())
+					os.Exit(1)
+				}
+			}
+		}
+	}
+
+	initConfig()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -161,19 +195,7 @@ func main() {
 
 	stopCh := make(chan struct{})
 
-	if mode == "calico" {
-		pkg.ModifyDbValue(bigip)
-	} else if mode == "flannel" {
-		if len(vxlanLocalAddress) > 1 && len(selfIpAddress) > 1 {
-			err := pkg.ConfigFlannel(bigip, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress)
-			if err != nil {
-				setupLog.Error(err, "Check. some flannel related configs onto bigip unsuccessful: %s", err.Error())
-				os.Exit(1)
-			}
-		}
-	}
-
-	go pkg.Deployer(stopCh, bigip)
+	go pkg.Deployer(stopCh, pkg.ActiveSIGs.Bigips)
 
 	if err := (&controllers.GatewayClassReconciler{
 		Client: mgr.GetClient(),
@@ -222,18 +244,13 @@ func main() {
 
 }
 
-func getCredentials(bigipUrl, bigipUsername, bigipPassword, credsDir string) error {
+func getCredentials(bigipPassword *string, credsDir string) error {
 	if len(credsDir) > 0 {
-		var usr, pass, url string
-		var err error
+		var pass string
 		if strings.HasSuffix(credsDir, "/") {
-			usr = credsDir + "username"
 			pass = credsDir + "password"
-			url = credsDir + "url"
 		} else {
-			usr = credsDir + "/username"
 			pass = credsDir + "/password"
-			url = credsDir + "/url"
 		}
 
 		setField := func(field *string, filename, fieldType string) error {
@@ -250,30 +267,11 @@ func getCredentials(bigipUrl, bigipUsername, bigipPassword, credsDir string) err
 			return nil
 		}
 
-		err = setField(&bigipUsername, usr, "username")
+		err := setField(bigipPassword, pass, "password")
 		if err != nil {
 			return err
 		}
-		err = setField(&bigipPassword, pass, "password")
-		if err != nil {
-			return err
-		}
-		err = setField(&bigipUrl, url, "url")
-		if err != nil {
-			return err
-		}
-	}
-	// Verify URL is valid
-	if !strings.HasPrefix(bigipUrl, "https://") {
-		bigipUrl = "https://" + bigipUrl
-	}
-	u, err := url.Parse(bigipUrl)
-	if nil != err {
-		return fmt.Errorf("Error parsing url: %s", err)
-	}
-	if len(u.Path) > 0 && u.Path != "/" {
-		return fmt.Errorf("BIGIP-URL path must be empty or '/'; check URL formatting and/or remove %s from path",
-			u.Path)
+
 	}
 	return nil
 }
