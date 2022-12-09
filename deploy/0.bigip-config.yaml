@@ -1,9 +1,0 @@
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: bigip-login
-  namespace: kube-system
-data:
-  password: UEBzc3cwcmQxMjM=              # base64 encoded 'mypassword'
-type: Opaque

@@ -23,6 +23,7 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
+	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,6 +49,7 @@ type GatewayClassReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	zlog := log.FromContext(ctx)
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
 	if req.Namespace != "" {
 		return ctrl.Result{}, fmt.Errorf("gateway class namespace must be ''")
 	}
@@ -62,7 +64,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			defer pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
-			return handleDeletingGatewayClass(ctx, req)
+			return handleDeletingGatewayClass(lctx, req)
 		} else {
 			return ctrl.Result{}, err
 		}
@@ -88,7 +90,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		// upsert gatewayclass
 		defer pkg.ActiveSIGs.SetGatewayClass(&obj)
-		return handleUpsertingGatewayClass(ctx, &obj)
+		return handleUpsertingGatewayClass(lctx, &obj)
 	}
 }
 
@@ -133,6 +135,7 @@ func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Res
 		StatusFunc: func() {
 		},
 		Partition: req.Name,
+		Context:   ctx,
 	}
 
 	pkg.PendingDeploys <- pkg.DeployRequest{
@@ -142,6 +145,7 @@ func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Res
 		StatusFunc: func() {
 		},
 		Partition: "cis-c-tenant",
+		Context:   ctx,
 	}
 
 	return ctrl.Result{}, nil
@@ -190,6 +194,7 @@ func handleUpsertingGatewayClass(ctx context.Context, obj *gatewayv1beta1.Gatewa
 		To:         &npcfgs,
 		StatusFunc: func() {},
 		Partition:  "cis-c-tenant",
+		Context:    ctx,
 	}
 
 	pkg.PendingDeploys <- pkg.DeployRequest{
@@ -198,6 +203,7 @@ func handleUpsertingGatewayClass(ctx context.Context, obj *gatewayv1beta1.Gatewa
 		To:         &ncfgs,
 		StatusFunc: func() {},
 		Partition:  reqn,
+		Context:    ctx,
 	}
 
 	return ctrl.Result{}, nil

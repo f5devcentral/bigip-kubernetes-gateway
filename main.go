@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -94,8 +95,6 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	utils.Initialize("debug")
-
 	pkg.ActiveSIGs.ControllerName = controllerName
 	pkg.ActiveSIGs.Mode = mode
 	// would want these 2 tunnel to be the same name so that we are configuing same fdb staff onto bigip
@@ -136,10 +135,12 @@ func main() {
 
 		if mode == "calico" {
 			for _, each := range pkg.ActiveSIGs.Bigips {
-				pkg.ModifyDbValue(each)
+				bc := &f5_bigip.BIGIPContext{BIGIP: *each, Context: context.TODO()}
+				pkg.ModifyDbValue(bc)
 			}
 		} else if mode == "flannel" {
 			for i, each := range pkg.ActiveSIGs.Bigips {
+				bc := &f5_bigip.BIGIPContext{BIGIP: *each, Context: context.TODO()}
 				setupLog.Info("URL is %s", each.URL)
 				vxlanProfileName := pkg.AllBigipConfigs.Bigips[i].VxlanProfileName
 				setupLog.Info("vxlanProfileName is : %s", vxlanProfileName)
@@ -149,7 +150,7 @@ func main() {
 				selfIpName := pkg.AllBigipConfigs.Bigips[i].SelfIpName
 				selfIpAddress := pkg.AllBigipConfigs.Bigips[i].SelfIpAddress
 
-				err := pkg.ConfigFlannel(each, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress)
+				err := pkg.ConfigFlannel(bc, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress)
 				if err != nil {
 					setupLog.Error(err, "Check. some flannel related configs onto bigip unsuccessful: %s", err.Error())
 					os.Exit(1)

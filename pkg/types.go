@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"context"
 	"sync"
 
 	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
@@ -14,6 +15,7 @@ type DeployRequest struct {
 	To         *map[string]interface{}
 	Partition  string
 	StatusFunc func()
+	Context    context.Context
 }
 
 type ParseRequest struct {
