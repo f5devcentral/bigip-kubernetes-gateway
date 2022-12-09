@@ -24,6 +24,7 @@ import (
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
+	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,7 +49,7 @@ type NodeReconciler struct {
 }
 
 func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
 	var obj v1.Endpoints
 	// zlog := log.FromContext(ctx)
 	// // too many logs.
@@ -56,13 +57,13 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			defer pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
-			return handleDeletingEndpoints(ctx, req)
+			return handleDeletingEndpoints(lctx, req)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
 		defer pkg.ActiveSIGs.SetEndpoints(&obj)
-		return handleUpsertingEndpoints(ctx, &obj)
+		return handleUpsertingEndpoints(lctx, &obj)
 	}
 }
 
@@ -70,21 +71,23 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	var obj v1.Service
 	zlog := log.FromContext(ctx)
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
 	zlog.V(1).Info("Service event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			defer pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
-			return handleDeletingService(ctx, req)
+			return handleDeletingService(lctx, req)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
 		defer pkg.ActiveSIGs.SetService(&obj)
-		return handleUpsertingService(ctx, &obj)
+		return handleUpsertingService(lctx, &obj)
 	}
 }
 
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)
 		return ctrl.Result{Requeue: true}, nil
@@ -127,6 +130,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 					To:         &ncfgs,
 					StatusFunc: func() {},
 					Partition:  "Common",
+					Context:    lctx,
 				}
 			}
 
@@ -171,6 +175,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			To:         &ncfgs,
 			StatusFunc: func() {},
 			Partition:  "Common",
+			Context:    lctx,
 		}
 	}
 	return ctrl.Result{}, nil
@@ -268,6 +273,7 @@ func handleDeletingEndpoints(ctx context.Context, req ctrl.Request) (ctrl.Result
 			StatusFunc: func() {
 			},
 			Partition: "cis-c-tenant",
+			Context:   ctx,
 		}
 
 	}
@@ -329,6 +335,7 @@ func handleUpsertingEndpoints(ctx context.Context, obj *v1.Endpoints) (ctrl.Resu
 			StatusFunc: func() {
 			},
 			Partition: "cis-c-tenant",
+			Context:   ctx,
 		}
 	}
 
@@ -387,6 +394,7 @@ func handleDeletingService(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 			StatusFunc: func() {
 			},
 			Partition: "cis-c-tenant",
+			Context:   ctx,
 		}
 
 	}
@@ -449,6 +457,7 @@ func handleUpsertingService(ctx context.Context, obj *v1.Service) (ctrl.Result, 
 			StatusFunc: func() {
 			},
 			Partition: "cis-c-tenant",
+			Context:   ctx,
 		}
 	}
 

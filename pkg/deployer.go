@@ -5,37 +5,18 @@ import (
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 )
 
-func deploy(bigip *f5_bigip.BIGIP, partition string, ocfgs, ncfgs *map[string]interface{}) error {
+func deploy(bc *f5_bigip.BIGIPContext, partition string, ocfgs, ncfgs *map[string]interface{}) error {
 	defer utils.TimeItToPrometheus()()
 
-	if err := bigip.DeployPartition(partition); err != nil {
+	if err := bc.DeployPartition(partition); err != nil {
 		return err
 	}
 
-	// // filter out pools arps nodes from ocfgs and ncfgs
-	// opcfgs, npcfgs, err := filterPoolCfgs(ocfgs, ncfgs)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// // case: pools arps and nodes are in cis-c-tenant
-	// pcmds, err := bigip.GenRestRequests("cis-c-tenant", opcfgs, npcfgs)
-	// for
-	// // 	for pools to delete, check if there's no refs to them, collect arps and nodes, delete them.
-	// // 	for pools to create, collect arps and nodes to create them.
-
-	// // case: pools arps and nodes are in namespace partition
-	// // 	for pools to delete, check if there's no refs to them,
-	// // 		delete pool and nodes from namespace partition
-	// // 		delete arps from cis-c-tenant
-	// // 	for pools to create,
-	// // 		create pool and nodes to namepsace partition
-	// // 		create arps to cis-c-tenent
-	cmds, err := bigip.GenRestRequests(partition, ocfgs, ncfgs)
+	cmds, err := bc.GenRestRequests(partition, ocfgs, ncfgs)
 	if err != nil {
 		return err
 	}
-	return bigip.DoRestRequests(cmds)
+	return bc.DoRestRequests(cmds)
 	// if err := bigip.DoRestRequests(cmds); err != nil {
 	// 	return err
 	// }
@@ -94,40 +75,43 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 		case <-stopCh:
 			return
 		case r := <-PendingDeploys:
+			slog := utils.LogFromContext(r.Context)
 			slog.Debugf("Processing request: %s", r.Meta)
 			for _, bigip := range bigips {
-				err := deploy(bigip, r.Partition, r.From, r.To)
+				bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: r.Context}
+				err := deploy(bc, r.Partition, r.From, r.To)
 				if err != nil {
 					// report the error to status or ...
 					slog.Errorf("failed to do deployment: %s", err.Error())
 				} else {
 					r.StatusFunc()
 				}
-
 			}
 		}
 	}
 }
 
-func ModifyDbValue(bigip *f5_bigip.BIGIP) error {
+func ModifyDbValue(bc *f5_bigip.BIGIPContext) error {
 	//tmrouted.tmos.routing
+	slog := utils.LogFromContext(bc)
 	slog.Debugf("enabing tmrouted.tmos.routing ")
-	return bigip.ModifyDbValue("tmrouted.tmos.routing", "enable")
+	return bc.ModifyDbValue("tmrouted.tmos.routing", "enable")
 }
 
-func ConfigFlannel(bigip *f5_bigip.BIGIP, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress string) error {
+func ConfigFlannel(bc *f5_bigip.BIGIPContext, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress string) error {
+	slog := utils.LogFromContext(bc)
 	slog.Debugf("adding some flannel related configs onto bigip")
-	err := bigip.CreateVxlanProfile(vxlanProfileName, vxlanPort)
+	err := bc.CreateVxlanProfile(vxlanProfileName, vxlanPort)
 	if err != nil {
 		return err
 	}
 
-	err = bigip.CreateVxlanTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName)
+	err = bc.CreateVxlanTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName)
 	if err != nil {
 		return err
 	}
 
-	err = bigip.CreateSelf(selfIpName, selfIpAddress, vxlanTunnelName)
+	err = bc.CreateSelf(selfIpName, selfIpAddress, vxlanTunnelName)
 	if err != nil {
 		return err
 	}
