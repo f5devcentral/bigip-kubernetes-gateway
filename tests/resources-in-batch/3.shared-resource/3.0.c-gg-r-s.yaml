@@ -1,0 +1,252 @@
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gatewayclass-config
+  namespace: kube-system
+data:
+  any.config: xxx
+
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: GatewayClass
+metadata:
+  name: bigip
+spec:
+  controllerName: f5.io/gateway-controller-name
+  parametersRef:
+    group: ""
+    kind: ConfigMap
+    name: gatewayclass-config
+    namespace: kube-system
+
+
+
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: gateway1
+  labels:
+    domain: k8s-gateway.nginx.org
+spec:
+  gatewayClassName: bigip
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+  addresses:
+    - value: 10.250.18.119
+
+
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: gateway2
+  labels:
+    domain: k8s-gateway.nginx.org
+spec:
+  gatewayClassName: bigip
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+  addresses:
+    - value: 10.250.18.120
+
+
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: test-match-path1
+spec:
+  parentRefs:
+    - name: gateway1
+      sectionName: http
+  hostnames:
+    - gateway.test.automation
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /path-test1
+      backendRefs:
+        - name: test-service1
+          port: 80
+
+
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: test-match-path2
+spec:
+  parentRefs:
+    - name: gateway1
+      sectionName: http
+    - name: gateway2
+      sectionName: http
+  hostnames:
+    - gateway.test.automation
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /path-test2
+      backendRefs:
+        - name: test-service2
+          port: 80
+
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-service1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-service1
+  template:
+    metadata:
+      labels:
+        app: test-service1
+    spec:
+      containers:
+        - name: test-service1
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: config-volume
+              mountPath: /etc/nginx/njs/dumps.js
+              subPath: dumps.js
+      volumes:
+        - name: config-volume
+          configMap:
+            name: nginx-config
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-service1
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: test-service1
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-service2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-service2
+  template:
+    metadata:
+      labels:
+        app: test-service2
+    spec:
+      containers:
+        - name: test-service2
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: config-volume
+              mountPath: /etc/nginx/njs/dumps.js
+              subPath: dumps.js
+      volumes:
+        - name: config-volume
+          configMap:
+            name: nginx-config
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-service2
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: test-service2
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  nginx.conf: |
+    user  nginx;
+    worker_processes  1;
+
+    load_module modules/ngx_http_js_module.so;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        js_import njs/dumps.js;
+        server {
+            listen       80;
+            server_name  localhost;
+
+            location / {
+                js_content dumps.hello;
+            }
+        }
+    }
+  dumps.js: |
+    function hello(r) {
+        let d = {
+            'queries': r.args,
+            'headers': r.headersIn,
+            'version': r.httpVersion,
+            'method': r.method,
+            'remote-address': r.remoteAddress,
+            'body': r.requestText,
+            'uri': r.uri,
+            // 'server_name': "bigip.test.service"
+        }
+
+        r.return(200, JSON.stringify(d)+"\n");
+    }
+
+    export default {hello};
