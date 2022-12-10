@@ -408,8 +408,9 @@ func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) er
 }
 
 func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
-	// irules
 	name := strings.Join([]string{hr.Namespace, hr.Name}, ".")
+
+	// hostnames
 	hostnameConditions := []string{}
 	for _, hn := range hr.Spec.Hostnames {
 		hostnameConditions = append(hostnameConditions, fmt.Sprintf(`[HTTP::host] matches "%s"`, hn))
@@ -420,11 +421,13 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 	}
 
 	rules := []string{}
-	for _, rl := range hr.Spec.Rules {
-		var pool string = ""
+	ruleInits := []string{}
+	for i, rl := range hr.Spec.Rules {
 		ruleConditions := []string{}
 		filterActions := []string{}
+		poolWeights := []string{}
 
+		// matches
 		for _, match := range rl.Matches {
 			matchConditions := []string{}
 			if match.Path != nil {
@@ -569,19 +572,52 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 				ns = string(*br.Namespace)
 			}
 			pn := strings.Join([]string{ns, string(br.Name)}, ".")
-			pool = fmt.Sprintf("pool /%s/%s", "cis-c-tenant", pn)
+			pool := fmt.Sprintf("/%s/%s", "cis-c-tenant", pn)
+			weight := 1
+			if br.Weight != nil {
+				weight = int(*br.Weight)
+			}
+			poolWeights = append(poolWeights, fmt.Sprintf("%s %d", pool, weight))
 		}
+
+		namedi := strings.ReplaceAll(fmt.Sprintf("%s_%d", name, i), ".", "_")
+		namedi = strings.ReplaceAll(namedi, "-", "_")
+		// namedi := fmt.Sprintf("%s%s%d", hr.Namespace, hr.Name, i)
+		ruleInit := fmt.Sprintf(`
+
+			array unset weights *
+			array unset static::pools_%s *
+			set index 0
+			
+			array set weights { %s }
+			foreach name [array names weights] {
+				for { set i 0 }  { $i < $weights($name) }  { incr i } {
+					set static::pools_%s($index) $name
+					incr index
+				}
+			}
+			set static::pools_%s_size [array size static::pools_%s]
+		`, namedi, strings.Join(poolWeights, " "), namedi, namedi, namedi)
+
 		rules = append(rules, fmt.Sprintf(`	
 			if { %s } {
 				%s
 				%s
 			}
-		`, ruleCondition, filterAction, pool))
+		`, ruleCondition, filterAction, fmt.Sprintf(`
+			set pool $static::pools_%s([expr {int(rand()*$static::pools_%s_size)}])
+			pool $pool
+		`, namedi, namedi)))
+
+		ruleInits = append(ruleInits, ruleInit)
 	}
 
 	ruleObj := map[string]interface{}{
 		"name": name,
 		"apiAnonymous": fmt.Sprintf(`
+		when RULE_INIT {
+			%s
+		}
 		when HTTP_REQUEST {
 			log local0. "request host: [HTTP::host], uri: [HTTP::uri], path: [HTTP::path], method: [HTTP::method]"
 			log local0. "headers: [HTTP::header names]"
@@ -593,7 +629,7 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 				%s
 			}
 		}
-	`, hostnameCondition, strings.Join(rules, "\n")),
+	`, strings.Join(ruleInits, "\n"), hostnameCondition, strings.Join(rules, "\n")),
 	}
 
 	rlt["ltm/rule/"+name] = ruleObj
