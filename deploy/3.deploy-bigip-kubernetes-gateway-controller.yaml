@@ -14,10 +14,10 @@ type: Opaque
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: bigip-gwapi-cm
+  name: bigip-kubernetes-gateway-configmap
   namespace: kube-system
 data:
-  bigip-k8s-gw-conf.yaml: |
+  bigip-kubernetes-gateway-config.yaml: |
     bigips:
       - mgmtIpAddress: "10.50.17.104"
         vxlanProfileName: "fl-vxlan"
@@ -75,23 +75,23 @@ spec:
             "--controller-name=f5.io/gateway-controller-name",
             "--mode=flannel",
             "--vxlan-tunnel-name=fl-vxlan",
-            "--bigip-conf-directory=/bigip-gw",
-            "--credentials-directory=/creds",
+            "--bigip-config-directory=/bigip-config",
+            "--bigip-credential-directory=/bigip-credential",
           ]
           volumeMounts:
-            - name: bigip-creds
-              mountPath: "/creds"
+            - name: bigip-credential
+              mountPath: "/bigip-credential"
               readOnly: true
             - name: bigip-config
-              mountPath: /bigip-gw
+              mountPath: /bigip-config
               readOnly: true
       volumes:
-        - name: bigip-creds
+        - name: bigip-credential
           secret:
             secretName: bigip-login
         - name: bigip-config
           configMap:
-            name: bigip-gwapi-cm
+            name: bigip-kubernetes-gateway-configmap
 
 ---
 
