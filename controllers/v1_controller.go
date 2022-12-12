@@ -114,6 +114,12 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 					return ctrl.Result{}, err
 				}
 			}
+			if pkg.ActiveSIGs.Mode == "flannel" {
+				oIpToMacV4, _ = k8s.NodeCache.AllIpToMac()
+				if ocfgs, err = pkg.ParseFdbsFrom(pkg.ActiveSIGs.VxlanTunnelName, oIpToMacV4); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
 
 			k8s.NodeCache.Unset(req.Name)
 
@@ -123,17 +129,21 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				if ncfgs, err = pkg.ParseNeighsFrom("gwcBGP", "64512", "64512", nIpAddresses); err != nil {
 					return ctrl.Result{}, err
 				}
-
-				pkg.PendingDeploys <- pkg.DeployRequest{
-					Meta:       fmt.Sprintf("refreshing neighs for node '%s'", req.Name),
-					From:       &ocfgs,
-					To:         &ncfgs,
-					StatusFunc: func() {},
-					Partition:  "Common",
-					Context:    lctx,
+			}
+			if pkg.ActiveSIGs.Mode == "flannel" {
+				nIpToMacV4, _ = k8s.NodeCache.AllIpToMac()
+				if ncfgs, err = pkg.ParseFdbsFrom(pkg.ActiveSIGs.VxlanTunnelName, nIpToMacV4); err != nil {
+					return ctrl.Result{}, err
 				}
 			}
-
+			pkg.PendingDeploys <- pkg.DeployRequest{
+				Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),
+				From:       &ocfgs,
+				To:         &ncfgs,
+				StatusFunc: func() {},
+				Partition:  "Common",
+				Context:    lctx,
+			}
 		} else {
 			return ctrl.Result{}, err
 		}

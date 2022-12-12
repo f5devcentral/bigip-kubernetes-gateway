@@ -77,15 +77,22 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 		case r := <-PendingDeploys:
 			slog := utils.LogFromContext(r.Context)
 			slog.Debugf("Processing request: %s", r.Meta)
+			done := make(chan bool)
 			for _, bigip := range bigips {
 				bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: r.Context}
-				err := deploy(bc, r.Partition, r.From, r.To)
-				if err != nil {
-					// report the error to status or ...
-					slog.Errorf("failed to do deployment: %s", err.Error())
-				} else {
+				go func(bc *f5_bigip.BIGIPContext, r DeployRequest) {
+					defer func() { done <- true }()
+
+					err := deploy(bc, r.Partition, r.From, r.To)
+					if err != nil {
+						// report the error to status or ...
+						slog.Errorf("failed to do deployment to %s: %s", bc.URL, err.Error())
+					}
 					r.StatusFunc()
-				}
+				}(bc, r)
+			}
+			for range bigips {
+				<-done
 			}
 		}
 	}

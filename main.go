@@ -82,9 +82,9 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 
 	flag.StringVar(&bigipPassword, "bigip-password", "", "The BI-IP password for connection.")
-	flag.StringVar(&credsDir, "credentials-directory", "/creds", "Optional, directory that contains the BIG-IP "+
+	flag.StringVar(&credsDir, "bigip-credential-directory", "/bigip-credential", "Optional, directory that contains the BIG-IP "+
 		"password file. To be used instead of bigip-password arguments.")
-	flag.StringVar(&bigipConfDir, "bigip-conf-directory", "/bigip-gw", "Directory of bigip-k8s-gw-conf.yaml file.")
+	flag.StringVar(&bigipConfDir, "bigip-config-directory", "/bigip-config", "Directory of bigip-k8s-gw-conf.yaml file.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
 	flag.StringVar(&mode, "mode", "", "if set to calico or flannel, will make some related configs onto bigip automatically.")
 	flag.StringVar(&vxlanTunnelName, "vxlan-tunnel-name", "fl-vxlan", "vxlan tunnel name on bigip.")
@@ -101,7 +101,7 @@ func main() {
 	pkg.ActiveSIGs.VxlanTunnelName = vxlanTunnelName
 
 	if len(bigipPassword) == 0 && len(credsDir) == 0 {
-		err := fmt.Errorf("Missing BIG-IP credentials info.")
+		err := fmt.Errorf("missing BIG-IP credentials info")
 		setupLog.Error(err, "Missing BIG-IP credentials info: %s", err.Error())
 		panic(err)
 	}
@@ -111,7 +111,7 @@ func main() {
 
 	viper1 := viper.New()
 	viper1.AddConfigPath(bigipConfDir)
-	viper1.SetConfigName("bigip-k8s-gw-conf")
+	viper1.SetConfigName("bigip-kubernetes-gateway-config")
 	viper1.SetConfigType("yaml")
 
 	viper1.ReadInConfig()

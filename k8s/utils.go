@@ -51,7 +51,6 @@ func FormatMembersFromServiceEndpoints(svc *v1.Service, eps *v1.Endpoints) ([]Sv
 					} else {
 						if utils.IsIpv6(addr.IP) {
 							member.MacAddr = k8no.MacAddrV6
-							slog.Debugf("mac addr: %s for ip: %s", k8no.MacAddrV6, addr.IP)
 						} else {
 							member.MacAddr = k8no.MacAddr
 						}

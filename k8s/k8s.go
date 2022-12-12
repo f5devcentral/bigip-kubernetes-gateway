@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
@@ -41,8 +42,7 @@ func (ns *Nodes) Set(n *v1.Node) error {
 			var v map[string]interface{}
 			err := json.Unmarshal([]byte(macStr), &v)
 			if err != nil {
-				slog.Errorf("failed to unmarshal m: %s", err.Error())
-				return err
+				return fmt.Errorf("failed to unmarshal m: %s", err.Error())
 			}
 
 			node.Name = n.Name
@@ -57,8 +57,7 @@ func (ns *Nodes) Set(n *v1.Node) error {
 				var v6 map[string]interface{}
 				err6 := json.Unmarshal([]byte(macStrV6), &v6)
 				if err6 != nil {
-					slog.Errorf("failed to unmarshal mac str v6: %s", err6.Error())
-					return err6
+					return fmt.Errorf("failed to unmarshal mac str v6: %s", err6.Error())
 				}
 
 				node.NetType = n.Annotations["flannel.alpha.coreos.com/backend-type"]
@@ -112,11 +111,9 @@ func (ns *Nodes) AllIpAddresses() []string {
 	rlt := []string{}
 	for _, n := range ns.Items {
 		if n.IpAddr != "" {
-			slog.Infof("n.IpAddress is %s:", n.IpAddr)
 			rlt = append(rlt, n.IpAddr)
 		}
 		if n.IpAddrV6 != "" {
-			slog.Infof("n.IpAddrV6 is %s:", n.IpAddrV6)
 			rlt = append(rlt, n.IpAddrV6)
 		}
 
@@ -133,11 +130,9 @@ func (ns *Nodes) AllIpToMac() (map[string]string, map[string]string) {
 
 	for _, n := range ns.Items {
 		if len(n.IpAddr) > 0 && len(n.MacAddr) > 0 {
-			slog.Infof("n.IpAddress is %s:", n.IpAddr)
 			rlt4[n.IpAddr] = n.MacAddr
 		}
 		if len(n.IpAddrV6) > 0 && len(n.MacAddrV6) > 0 {
-			slog.Infof("n.IpAddrV6 is %s:", n.IpAddrV6)
 			rlt6[n.IpAddrV6] = n.MacAddrV6
 		}
 
