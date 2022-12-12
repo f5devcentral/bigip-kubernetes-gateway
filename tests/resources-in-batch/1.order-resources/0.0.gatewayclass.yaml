@@ -17,11 +17,6 @@ metadata:
   name: bigip
 spec:
   controllerName: f5.io/gateway-controller-name
-  parametersRef:
-    group: ""
-    kind: ConfigMap
-    name: gatewayclass-config
-    namespace: kube-system
 
 
     
