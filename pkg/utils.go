@@ -21,7 +21,6 @@ import (
 
 func init() {
 	PendingDeploys = make(chan DeployRequest, 16)
-	PendingParses = make(chan ParseRequest, 16)
 	ActiveSIGs = &SIGCache{
 		mutex:           sync.RWMutex{},
 		SyncedAtStart:   false,

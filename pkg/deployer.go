@@ -106,30 +106,3 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 		}
 	}
 }
-
-func ModifyDbValue(bc *f5_bigip.BIGIPContext) error {
-	//tmrouted.tmos.routing
-	slog := utils.LogFromContext(bc)
-	slog.Debugf("enabing tmrouted.tmos.routing ")
-	return bc.ModifyDbValue("tmrouted.tmos.routing", "enable")
-}
-
-func ConfigFlannel(bc *f5_bigip.BIGIPContext, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress string) error {
-	slog := utils.LogFromContext(bc)
-	slog.Debugf("adding some flannel related configs onto bigip")
-	err := bc.CreateVxlanProfile(vxlanProfileName, vxlanPort)
-	if err != nil {
-		return err
-	}
-
-	err = bc.CreateVxlanTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName)
-	if err != nil {
-		return err
-	}
-
-	err = bc.CreateSelf(selfIpName, selfIpAddress, vxlanTunnelName)
-	if err != nil {
-		return err
-	}
-	return nil
-}
