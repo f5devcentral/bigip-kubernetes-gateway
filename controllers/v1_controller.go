@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
@@ -93,48 +94,17 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	oIpAddresses := []string{}
-	nIpAddresses := []string{}
 	ocfgs := map[string]interface{}{}
 	ncfgs := map[string]interface{}{}
 
-	oIpToMacV4 := map[string]string{}
-	// oIpToMacV6 := map[string]string{}
-	nIpToMacV4 := map[string]string{}
-	// nIpToMacV6 := map[string]string{}
-
 	var obj v1.Node
-	zlog := log.FromContext(ctx)
-	zlog.V(1).Info("resource event: " + req.NamespacedName.String())
+	// zlog := log.FromContext(ctx)
+	// zlog.V(1).Info("resource event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			if pkg.ActiveSIGs.Mode == "calico" {
-				oIpAddresses = k8s.NodeCache.AllIpAddresses()
-				if ocfgs, err = pkg.ParseNeighsFrom("gwcBGP", "64512", "64512", oIpAddresses); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if pkg.ActiveSIGs.Mode == "flannel" {
-				oIpToMacV4, _ = k8s.NodeCache.AllIpToMac()
-				if ocfgs, err = pkg.ParseFdbsFrom(pkg.ActiveSIGs.VxlanTunnelName, oIpToMacV4); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-
 			k8s.NodeCache.Unset(req.Name)
-
-			if pkg.ActiveSIGs.Mode == "calico" {
-				nIpAddresses = k8s.NodeCache.AllIpAddresses()
-
-				if ncfgs, err = pkg.ParseNeighsFrom("gwcBGP", "64512", "64512", nIpAddresses); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if pkg.ActiveSIGs.Mode == "flannel" {
-				nIpToMacV4, _ = k8s.NodeCache.AllIpToMac()
-				if ncfgs, err = pkg.ParseFdbsFrom(pkg.ActiveSIGs.VxlanTunnelName, nIpToMacV4); err != nil {
-					return ctrl.Result{}, err
-				}
+			if ncfgs, err = pkg.ParseNodeConfigs(); err != nil {
+				return ctrl.Result{}, err
 			}
 			pkg.PendingDeploys <- pkg.DeployRequest{
 				Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),
@@ -148,36 +118,14 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			return ctrl.Result{}, err
 		}
 	} else {
-		if pkg.ActiveSIGs.Mode == "calico" {
-			oIpAddresses = k8s.NodeCache.AllIpAddresses()
-
-			if ocfgs, err = pkg.ParseNeighsFrom("gwcBGP", "64512", "64512", oIpAddresses); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-
-		if pkg.ActiveSIGs.Mode == "flannel" {
-			oIpToMacV4, _ = k8s.NodeCache.AllIpToMac()
-			if ocfgs, err = pkg.ParseFdbsFrom(pkg.ActiveSIGs.VxlanTunnelName, oIpToMacV4); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-
+		orig := k8s.NodeCache.Get(obj.Name)
 		k8s.NodeCache.Set(obj.DeepCopy())
-
-		if pkg.ActiveSIGs.Mode == "calico" {
-			nIpAddresses = k8s.NodeCache.AllIpAddresses()
-			if ncfgs, err = pkg.ParseNeighsFrom("gwcBGP", "64512", "64512", nIpAddresses); err != nil {
-				return ctrl.Result{}, err
-			}
-
+		// use reflect.DeepEqual to eliminate endless false-positive node events
+		if newa := k8s.NodeCache.Get(obj.Name); reflect.DeepEqual(orig, newa) {
+			return ctrl.Result{}, nil
 		}
-
-		if pkg.ActiveSIGs.Mode == "flannel" {
-			nIpToMacV4, _ = k8s.NodeCache.AllIpToMac()
-			if ncfgs, err = pkg.ParseFdbsFrom(pkg.ActiveSIGs.VxlanTunnelName, nIpToMacV4); err != nil {
-				return ctrl.Result{}, err
-			}
+		if ncfgs, err = pkg.ParseNodeConfigs(); err != nil {
+			return ctrl.Result{}, err
 		}
 		pkg.PendingDeploys <- pkg.DeployRequest{
 			Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),

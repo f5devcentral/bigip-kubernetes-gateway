@@ -636,7 +636,7 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 	return nil
 }
 
-func ParseNeighsFrom(routerName, localAs, remoteAs string, addresses []string) (map[string]interface{}, error) {
+func parseNeighsFrom(routerName, localAs, remoteAs string, addresses []string) (map[string]interface{}, error) {
 	rlt := map[string]interface{}{}
 
 	name := strings.Join([]string{"Common", routerName}, ".")
@@ -662,7 +662,7 @@ func ParseNeighsFrom(routerName, localAs, remoteAs string, addresses []string) (
 	}, nil
 }
 
-func ParseFdbsFrom(tunnelName string, iPToMac map[string]string) (map[string]interface{}, error) {
+func parseFdbsFrom(tunnelName string, iPToMac map[string]string) (map[string]interface{}, error) {
 	rlt := map[string]interface{}{}
 
 	rlt["net/fdb/tunnel/"+tunnelName] = map[string]interface{}{
@@ -683,4 +683,26 @@ func ParseFdbsFrom(tunnelName string, iPToMac map[string]string) (map[string]int
 	return map[string]interface{}{
 		"": rlt,
 	}, nil
+}
+
+func ParseNodeConfigs() (map[string]interface{}, error) {
+	cfgs := map[string]interface{}{}
+	var err error
+
+	if ActiveSIGs.Mode == "calico" {
+		nIpAddresses := k8s.NodeCache.AllIpAddresses()
+		if cfgs, err = parseNeighsFrom("gwcBGP", "64512", "64512", nIpAddresses); err != nil {
+			return map[string]interface{}{}, err
+		}
+
+	}
+
+	if ActiveSIGs.Mode == "flannel" {
+		nIpToMacV4, _ := k8s.NodeCache.AllIpToMac()
+		if cfgs, err = parseFdbsFrom(ActiveSIGs.VxlanTunnelName, nIpToMacV4); err != nil {
+			return map[string]interface{}{}, err
+		}
+	}
+
+	return cfgs, nil
 }

@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -236,6 +237,29 @@ func main() {
 	}
 
 	go pkg.ActiveSIGs.SyncAllResources(mgr)
+
+	go func() {
+		for {
+			<-time.After(100 * time.Millisecond)
+			if pkg.ActiveSIGs.SyncedAtStart {
+				break
+			}
+		}
+
+		if ncfgs, err := pkg.ParseNodeConfigs(); err != nil {
+			setupLog.Error(err, "unable to parse nodes config for net setup")
+			os.Exit(1)
+		} else {
+			pkg.PendingDeploys <- pkg.DeployRequest{
+				Meta:       "net setup at startup",
+				From:       nil,
+				To:         &ncfgs,
+				StatusFunc: func() {},
+				Partition:  "Common",
+				Context:    context.TODO(),
+			}
+		}
+	}()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
