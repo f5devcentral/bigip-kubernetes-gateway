@@ -128,6 +128,7 @@ func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Res
 		return ctrl.Result{}, err
 	}
 
+	dctx := context.WithValue(ctx, pkg.CtxKey_DeletePartition, "yes")
 	pkg.PendingDeploys <- pkg.DeployRequest{
 		Meta: fmt.Sprintf("clearing gateways for gatewayclass '%s'", req.Name),
 		From: &ocfgs,
@@ -135,7 +136,7 @@ func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Res
 		StatusFunc: func() {
 		},
 		Partition: req.Name,
-		Context:   ctx,
+		Context:   dctx,
 	}
 
 	pkg.PendingDeploys <- pkg.DeployRequest{
@@ -197,13 +198,14 @@ func handleUpsertingGatewayClass(ctx context.Context, obj *gatewayv1beta1.Gatewa
 		Context:    ctx,
 	}
 
+	cctx := context.WithValue(ctx, pkg.CtxKey_CreatePartition, "yes")
 	pkg.PendingDeploys <- pkg.DeployRequest{
 		Meta:       fmt.Sprintf("refreshing gateways for gatewayclass '%s'", reqn),
 		From:       &ocfgs,
 		To:         &ncfgs,
 		StatusFunc: func() {},
 		Partition:  reqn,
-		Context:    ctx,
+		Context:    cctx,
 	}
 
 	return ctrl.Result{}, nil

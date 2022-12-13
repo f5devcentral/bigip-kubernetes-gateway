@@ -8,10 +8,6 @@ import (
 func deploy(bc *f5_bigip.BIGIPContext, partition string, ocfgs, ncfgs *map[string]interface{}) error {
 	defer utils.TimeItToPrometheus()()
 
-	if err := bc.DeployPartition(partition); err != nil {
-		return err
-	}
-
 	cmds, err := bc.GenRestRequests(partition, ocfgs, ncfgs)
 	if err != nil {
 		return err
@@ -83,10 +79,23 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 				go func(bc *f5_bigip.BIGIPContext, r DeployRequest) {
 					defer func() { done <- true }()
 
+					if r.Context.Value(CtxKey_CreatePartition) != nil {
+						if err := bc.DeployPartition(r.Partition); err != nil {
+							slog.Errorf("failed to deploy partition %s: %s", r.Partition, err.Error())
+							return
+						}
+					}
 					err := deploy(bc, r.Partition, r.From, r.To)
 					if err != nil {
 						// report the error to status or ...
 						slog.Errorf("failed to do deployment to %s: %s", bc.URL, err.Error())
+						return
+					}
+					if r.Context.Value(CtxKey_DeletePartition) != nil {
+						if err := bc.DeletePartition(r.Partition); err != nil {
+							slog.Errorf("failed to deploy partition %s: %s", r.Partition, err.Error())
+							return
+						}
 					}
 					r.StatusFunc()
 				}(bc, r)
