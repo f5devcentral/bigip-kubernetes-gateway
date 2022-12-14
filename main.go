@@ -69,8 +69,6 @@ func main() {
 		metricsAddr          string
 		enableLeaderElection bool
 		probeAddr            string
-		bigipPassword        string
-		bigipConfigs         pkg.BIGIPConfigs
 		credsDir             string
 		confDir              string
 		controllerName       string
@@ -103,13 +101,13 @@ func main() {
 		setupLog.Error(err, "Missing BIG-IP credentials info: %s", err.Error())
 		panic(err)
 	}
-	if err := getCredentials(&bigipPassword, credsDir); err != nil {
+	if err := getCredentials(&pkg.BIPPassword, credsDir); err != nil {
 		panic(err)
 	}
-	if err := getConfigs(&bigipConfigs, confDir); err != nil {
+	if err := getConfigs(&pkg.BIPConfigs, confDir); err != nil {
 		panic(err)
 	}
-	if err := configBigips(&bigipConfigs, bigipPassword); err != nil {
+	if err := setupBIGIPs(); err != nil {
 		panic(err)
 	}
 
@@ -148,7 +146,7 @@ func main() {
 
 	stopCh := make(chan struct{})
 
-	go pkg.Deployer(stopCh, pkg.ActiveSIGs.Bigips)
+	go pkg.Deployer(stopCh, pkg.BIGIPs)
 
 	setupReconcilers(mgr)
 
@@ -179,6 +177,8 @@ func getCredentials(bigipPassword *string, credsDir string) error {
 	} else {
 		defer f.Close()
 		if b, err := io.ReadAll(f); err != nil {
+			return err
+		} else {
 			*bigipPassword = string(b)
 		}
 		return nil
@@ -210,17 +210,23 @@ func applyNodeConfigsAtStart() {
 		}
 	}
 
-	if ncfgs, err := pkg.ParseNodeConfigs(); err != nil {
-		setupLog.Error(err, "unable to parse nodes config for net setup")
-		os.Exit(1)
-	} else {
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta:       "net setup at startup",
-			From:       nil,
-			To:         &ncfgs,
-			StatusFunc: func() {},
-			Partition:  "Common",
-			Context:    context.TODO(),
+	for _, c := range pkg.BIPConfigs {
+		if ncfgs, err := pkg.ParseNodeConfigs(&c); err != nil {
+			setupLog.Error(err, "unable to parse nodes config for net setup")
+			os.Exit(1)
+		} else {
+			if c.Management.Port == nil {
+				*c.Management.Port = 443
+			}
+			url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
+			pkg.PendingDeploys <- pkg.DeployRequest{
+				Meta:       "net setup at startup",
+				From:       nil,
+				To:         &ncfgs,
+				StatusFunc: func() {},
+				Partition:  "Common",
+				Context:    context.WithValue(context.TODO(), pkg.CtxKey_SpecifiedBIGIP, url),
+			}
 		}
 	}
 }
@@ -255,9 +261,9 @@ func setupReconcilers(mgr manager.Manager) {
 	}
 }
 
-func configBigips(cs *pkg.BIGIPConfigs, pw string) error {
+func setupBIGIPs() error {
 	errs := []string{}
-	for i, c := range *cs {
+	for i, c := range pkg.BIPConfigs {
 		if c.Management == nil {
 			errs = append(errs, fmt.Sprintf("config #%d: missing management section", i))
 			continue
@@ -268,8 +274,8 @@ func configBigips(cs *pkg.BIGIPConfigs, pw string) error {
 		}
 		url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
 		username := c.Management.Username
-		bigip := f5_bigip.Initialize(url, username, pw, "debug")
-		pkg.ActiveSIGs.Bigips = append(pkg.ActiveSIGs.Bigips, bigip)
+		bigip := f5_bigip.Initialize(url, username, pkg.BIPPassword, "debug")
+		pkg.BIGIPs = append(pkg.BIGIPs, bigip)
 
 		bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: context.TODO()}
 		if c.Calico != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
 	v1 "k8s.io/api/core/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
@@ -26,18 +25,17 @@ type ParseRequest struct {
 }
 
 type SIGCache struct {
-	mutex           sync.RWMutex
-	SyncedAtStart   bool
-	ControllerName  string
-	Mode            string
-	VxlanTunnelName string
-	Gateway         map[string]*gatewayv1beta1.Gateway
-	HTTPRoute       map[string]*gatewayv1beta1.HTTPRoute
-	Endpoints       map[string]*v1.Endpoints
-	Service         map[string]*v1.Service
-	GatewayClasses  map[string]*gatewayv1beta1.GatewayClass
-	Bigips          []*f5_bigip.BIGIP
+	mutex          sync.RWMutex
+	SyncedAtStart  bool
+	ControllerName string
+	Gateway        map[string]*gatewayv1beta1.Gateway
+	HTTPRoute      map[string]*gatewayv1beta1.HTTPRoute
+	Endpoints      map[string]*v1.Endpoints
+	Service        map[string]*v1.Service
+	GatewayClasses map[string]*gatewayv1beta1.GatewayClass
 	// Node      map[string]*v1.Node
+	// Mode            string
+	// VxlanTunnelName string
 }
 
 type DepNode struct {
@@ -48,7 +46,8 @@ type DepNode struct {
 // TODO: delete unused..
 type DepTrees []*DepNode
 
-type BIGIPConfigs []struct {
+type BIGIPConfigs []BIGIPConfig
+type BIGIPConfig struct {
 	Management *struct {
 		Username  string
 		IpAddress string `yaml:"ipAddress"`

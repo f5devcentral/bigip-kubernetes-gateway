@@ -75,6 +75,10 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 			slog.Debugf("Processing request: %s", r.Meta)
 			done := make(chan bool)
 			for _, bigip := range bigips {
+				specified := r.Context.Value(CtxKey_SpecifiedBIGIP)
+				if specified != nil && specified.(string) != bigip.URL {
+					continue
+				}
 				bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: r.Context}
 				go func(bc *f5_bigip.BIGIPContext, r DeployRequest) {
 					defer func() { done <- true }()
@@ -100,7 +104,11 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 					r.StatusFunc()
 				}(bc, r)
 			}
-			for range bigips {
+			for _, bigip := range bigips {
+				specified := r.Context.Value(CtxKey_SpecifiedBIGIP)
+				if specified != nil && specified.(string) != bigip.URL {
+					continue
+				}
 				<-done
 			}
 		}

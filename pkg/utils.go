@@ -22,17 +22,17 @@ import (
 func init() {
 	PendingDeploys = make(chan DeployRequest, 16)
 	ActiveSIGs = &SIGCache{
-		mutex:           sync.RWMutex{},
-		SyncedAtStart:   false,
-		ControllerName:  "",
-		Mode:            "",
-		VxlanTunnelName: "",
-		Gateway:         map[string]*gatewayv1beta1.Gateway{},
-		HTTPRoute:       map[string]*gatewayv1beta1.HTTPRoute{},
-		Endpoints:       map[string]*v1.Endpoints{},
-		Service:         map[string]*v1.Service{},
-		GatewayClasses:  map[string]*gatewayv1beta1.GatewayClass{},
+		mutex:          sync.RWMutex{},
+		SyncedAtStart:  false,
+		ControllerName: "",
+		Gateway:        map[string]*gatewayv1beta1.Gateway{},
+		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
+		Endpoints:      map[string]*v1.Endpoints{},
+		Service:        map[string]*v1.Service{},
+		GatewayClasses: map[string]*gatewayv1beta1.GatewayClass{},
 		// Node:      map[string]*v1.Node{},
+		// Mode:            "",
+		// VxlanTunnelName: "",
 	}
 }
 
