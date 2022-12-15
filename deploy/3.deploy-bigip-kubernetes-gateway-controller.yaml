@@ -6,7 +6,7 @@ metadata:
   name: bigip-login
   namespace: kube-system
 data:
-  password: UEBzc3cwcmQxMjM=              # base64 encoded 'mypassword'
+  password: UEBzc3cwcmQxMjM=   # base64 encoded
 type: Opaque
 
 ---
@@ -17,24 +17,23 @@ metadata:
   name: bigip-kubernetes-gateway-configmap
   namespace: kube-system
 data:
-  bigip-kubernetes-gateway-config.yaml: |
-    bigips:
-      - mgmtIpAddress: "10.50.17.104"
-        vxlanProfileName: "fl-vxlan"
-        vxlanPort: "8472"
-        vxlanLocalAddress: "4.4.4.4"
-        selfIpName: "flannel-self"
-        selfIpAddress: "5.5.5.5/28"
-        url: "https://10.50.17.104:8443"
-        username: "admin"
-      - mgmtIpAddress: "10.50.15.173"
-        vxlanProfileName: "fl-vxlan"
-        vxlanPort: "8472"
-        vxlanLocalAddress: "4.4.4.5"
-        selfIpName: "flannel-self"
-        selfIpAddress: "5.5.5.6/28"
-        url: "https://10.50.15.173:8443"
-        username: "admin"
+  bigip-kubernetes-gateway-config: |
+    - management:
+        username: admin
+        ipAddress: 10.250.15.180
+        port: 443
+      flannel:
+        tunnels:
+          - name: fl-tunnel
+            profileName: fl-vxlan
+            port: 8472
+            localAddress: 10.250.18.119
+        selfIPs:
+          - name: flannel-self
+            ipMask: 10.42.20.1/16
+            tunnelName: fl-tunnel
+      # calico:
+      #   kindsOfConfigItems: ""
 
 ---
 

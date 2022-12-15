@@ -75,6 +75,10 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 			slog.Debugf("Processing request: %s", r.Meta)
 			done := make(chan bool)
 			for _, bigip := range bigips {
+				specified := r.Context.Value(CtxKey_SpecifiedBIGIP)
+				if specified != nil && specified.(string) != bigip.URL {
+					continue
+				}
 				bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: r.Context}
 				go func(bc *f5_bigip.BIGIPContext, r DeployRequest) {
 					defer func() { done <- true }()
@@ -100,36 +104,13 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 					r.StatusFunc()
 				}(bc, r)
 			}
-			for range bigips {
+			for _, bigip := range bigips {
+				specified := r.Context.Value(CtxKey_SpecifiedBIGIP)
+				if specified != nil && specified.(string) != bigip.URL {
+					continue
+				}
 				<-done
 			}
 		}
 	}
-}
-
-func ModifyDbValue(bc *f5_bigip.BIGIPContext) error {
-	//tmrouted.tmos.routing
-	slog := utils.LogFromContext(bc)
-	slog.Debugf("enabing tmrouted.tmos.routing ")
-	return bc.ModifyDbValue("tmrouted.tmos.routing", "enable")
-}
-
-func ConfigFlannel(bc *f5_bigip.BIGIPContext, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress string) error {
-	slog := utils.LogFromContext(bc)
-	slog.Debugf("adding some flannel related configs onto bigip")
-	err := bc.CreateVxlanProfile(vxlanProfileName, vxlanPort)
-	if err != nil {
-		return err
-	}
-
-	err = bc.CreateVxlanTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName)
-	if err != nil {
-		return err
-	}
-
-	err = bc.CreateSelf(selfIpName, selfIpAddress, vxlanTunnelName)
-	if err != nil {
-		return err
-	}
-	return nil
 }
