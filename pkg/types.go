@@ -18,6 +18,8 @@ type DeployRequest struct {
 	Context    context.Context
 }
 
+type CtxKeyType string
+
 type ParseRequest struct {
 	Gateway   *gatewayv1beta1.Gateway
 	HTTPRoute *gatewayv1beta1.HTTPRoute
