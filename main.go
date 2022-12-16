@@ -279,7 +279,7 @@ func setupBIGIPs() error {
 
 		bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: context.TODO()}
 		if c.Calico != nil {
-			if err := bc.ModifyDbValue("tmrouted.tmos.routing", "enable"); err != nil {
+			if err := pkg.EnableBGPRouting(bc); err != nil {
 				errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
 				continue
 			}
