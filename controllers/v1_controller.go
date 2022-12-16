@@ -103,17 +103,24 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			k8s.NodeCache.Unset(req.Name)
-			if ncfgs, err = pkg.ParseNodeConfigs(); err != nil {
-				return ctrl.Result{}, err
+			for _, c := range pkg.BIPConfigs {
+				if ncfgs, err = pkg.ParseNodeConfigs(&c); err != nil {
+					return ctrl.Result{}, err
+				}
+				if c.Management.Port == nil {
+					*c.Management.Port = 443
+				}
+				url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
+				pkg.PendingDeploys <- pkg.DeployRequest{
+					Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),
+					From:       &ocfgs,
+					To:         &ncfgs,
+					StatusFunc: func() {},
+					Partition:  "Common",
+					Context:    context.WithValue(lctx, pkg.CtxKey_SpecifiedBIGIP, url),
+				}
 			}
-			pkg.PendingDeploys <- pkg.DeployRequest{
-				Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),
-				From:       &ocfgs,
-				To:         &ncfgs,
-				StatusFunc: func() {},
-				Partition:  "Common",
-				Context:    lctx,
-			}
+
 		} else {
 			return ctrl.Result{}, err
 		}
@@ -124,16 +131,22 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		if newa := k8s.NodeCache.Get(obj.Name); reflect.DeepEqual(orig, newa) {
 			return ctrl.Result{}, nil
 		}
-		if ncfgs, err = pkg.ParseNodeConfigs(); err != nil {
-			return ctrl.Result{}, err
-		}
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),
-			From:       &ocfgs,
-			To:         &ncfgs,
-			StatusFunc: func() {},
-			Partition:  "Common",
-			Context:    lctx,
+		for _, c := range pkg.BIPConfigs {
+			if ncfgs, err = pkg.ParseNodeConfigs(&c); err != nil {
+				return ctrl.Result{}, err
+			}
+			if c.Management.Port == nil {
+				*c.Management.Port = 443
+			}
+			url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
+			pkg.PendingDeploys <- pkg.DeployRequest{
+				Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),
+				From:       &ocfgs,
+				To:         &ncfgs,
+				StatusFunc: func() {},
+				Partition:  "Common",
+				Context:    context.WithValue(lctx, pkg.CtxKey_SpecifiedBIGIP, url),
+			}
 		}
 	}
 	return ctrl.Result{}, nil

@@ -1,6 +1,8 @@
 package pkg
 
 import (
+	"fmt"
+
 	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 )
@@ -75,6 +77,10 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 			slog.Debugf("Processing request: %s", r.Meta)
 			done := make(chan bool)
 			for _, bigip := range bigips {
+				specified := r.Context.Value(CtxKey_SpecifiedBIGIP)
+				if specified != nil && specified.(string) != bigip.URL {
+					continue
+				}
 				bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: r.Context}
 				go func(bc *f5_bigip.BIGIPContext, r DeployRequest) {
 					defer func() { done <- true }()
@@ -100,36 +106,44 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 					r.StatusFunc()
 				}(bc, r)
 			}
-			for range bigips {
+			for _, bigip := range bigips {
+				specified := r.Context.Value(CtxKey_SpecifiedBIGIP)
+				if specified != nil && specified.(string) != bigip.URL {
+					continue
+				}
 				<-done
 			}
 		}
 	}
 }
 
-func ModifyDbValue(bc *f5_bigip.BIGIPContext) error {
-	//tmrouted.tmos.routing
-	slog := utils.LogFromContext(bc)
-	slog.Debugf("enabing tmrouted.tmos.routing ")
+func EnableBGPRouting(bc *f5_bigip.BIGIPContext) error {
+	kind := "net/route-domain"
+	partition, subfolder, name := "Common", "", "0" // route domain 0
+
+	exists, err := bc.Exist(kind, name, partition, subfolder)
+	if err != nil {
+		return err
+	}
+	if exists == nil {
+		return fmt.Errorf("route domain 0 must exist. check it")
+	}
+	// "Cannot mix routing-protocol Legacy and TMOS mode for route-domain (/Common/0)."
+	// We need to remove "BGP" from routingProtocol for TMOS mode
+	if (*exists)["routingProtocol"] != nil {
+		nrps := []interface{}{}
+		for _, rp := range (*exists)["routingProtocol"].([]interface{}) {
+			if rp.(string) != "BGP" {
+				nrps = append(nrps, rp)
+			}
+		}
+		body := map[string]interface{}{
+			"routingProtocol": nrps,
+		}
+		if err := bc.Update(kind, name, partition, subfolder, body); err != nil {
+			return err
+		}
+	}
+
 	return bc.ModifyDbValue("tmrouted.tmos.routing", "enable")
-}
-
-func ConfigFlannel(bc *f5_bigip.BIGIPContext, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress string) error {
-	slog := utils.LogFromContext(bc)
-	slog.Debugf("adding some flannel related configs onto bigip")
-	err := bc.CreateVxlanProfile(vxlanProfileName, vxlanPort)
-	if err != nil {
-		return err
-	}
-
-	err = bc.CreateVxlanTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName)
-	if err != nil {
-		return err
-	}
-
-	err = bc.CreateSelf(selfIpName, selfIpAddress, vxlanTunnelName)
-	if err != nil {
-		return err
-	}
-	return nil
 }

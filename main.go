@@ -20,7 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -30,7 +30,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,6 +39,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/controllers"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
@@ -68,12 +69,11 @@ func main() {
 		metricsAddr          string
 		enableLeaderElection bool
 		probeAddr            string
-		bigipPassword        string
 		credsDir             string
-		bigipConfDir         string
+		confDir              string
 		controllerName       string
-		mode                 string
-		vxlanTunnelName      string
+		// mode                 string
+		// vxlanTunnelName      string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -82,13 +82,10 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
-	flag.StringVar(&bigipPassword, "bigip-password", "", "The BI-IP password for connection.")
-	flag.StringVar(&credsDir, "bigip-credential-directory", "/bigip-credential", "Optional, directory that contains the BIG-IP "+
+	flag.StringVar(&credsDir, "bigip-credential-directory", "/bigip-credential", "Directory that contains the BIG-IP "+
 		"password file. To be used instead of bigip-password arguments.")
-	flag.StringVar(&bigipConfDir, "bigip-config-directory", "/bigip-config", "Directory of bigip-k8s-gw-conf.yaml file.")
+	flag.StringVar(&confDir, "bigip-config-directory", "/bigip-config", "Directory of bigip-k8s-gw-conf.yaml file.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
-	flag.StringVar(&mode, "mode", "", "if set to calico or flannel, will make some related configs onto bigip automatically.")
-	flag.StringVar(&vxlanTunnelName, "vxlan-tunnel-name", "fl-vxlan", "vxlan tunnel name on bigip.")
 
 	opts := zap.Options{
 		Development: true,
@@ -97,70 +94,22 @@ func main() {
 	flag.Parse()
 
 	pkg.ActiveSIGs.ControllerName = controllerName
-	pkg.ActiveSIGs.Mode = mode
-	// would want these 2 tunnel to be the same name so that we are configuing same fdb staff onto bigip
-	pkg.ActiveSIGs.VxlanTunnelName = vxlanTunnelName
 
-	if len(bigipPassword) == 0 && len(credsDir) == 0 {
-		err := fmt.Errorf("missing BIG-IP credentials info")
+	// TODO: the filenames must be 'bigip-kubernetes-gateway-config' and 'password'
+	if confDir == "" || credsDir == "" {
+		err := fmt.Errorf("missing BIG-IP credential/configuration parameters")
 		setupLog.Error(err, "Missing BIG-IP credentials info: %s", err.Error())
 		panic(err)
 	}
-	if err := getCredentials(&bigipPassword, credsDir); err != nil {
+	if err := getCredentials(&pkg.BIPPassword, credsDir); err != nil {
 		panic(err)
 	}
-
-	viper1 := viper.New()
-	viper1.AddConfigPath(bigipConfDir)
-	viper1.SetConfigName("bigip-kubernetes-gateway-config")
-	viper1.SetConfigType("yaml")
-
-	viper1.ReadInConfig()
-
-	initConfig := func() {
-		err := viper1.Unmarshal(&pkg.AllBigipConfigs)
-		if err != nil {
-			panic(fmt.Sprintf("yaml file unmarshal err: %v", err))
-		}
-
-		for _, bigipconfig := range pkg.AllBigipConfigs.Bigips {
-			url := bigipconfig.Url
-			setupLog.Info("url is %s", url)
-			username := bigipconfig.Username
-			setupLog.Info("username is %s", username)
-
-			setupLog.Info("bigipPassword is %s", bigipPassword)
-			bigip := f5_bigip.Initialize(url, username, bigipPassword, "debug")
-			pkg.ActiveSIGs.Bigips = append(pkg.ActiveSIGs.Bigips, bigip)
-		}
-
-		if mode == "calico" {
-			for _, each := range pkg.ActiveSIGs.Bigips {
-				bc := &f5_bigip.BIGIPContext{BIGIP: *each, Context: context.TODO()}
-				pkg.ModifyDbValue(bc)
-			}
-		} else if mode == "flannel" {
-			for i, each := range pkg.ActiveSIGs.Bigips {
-				bc := &f5_bigip.BIGIPContext{BIGIP: *each, Context: context.TODO()}
-				setupLog.Info("URL is %s", each.URL)
-				vxlanProfileName := pkg.AllBigipConfigs.Bigips[i].VxlanProfileName
-				setupLog.Info("vxlanProfileName is : %s", vxlanProfileName)
-				vxlanPort := pkg.AllBigipConfigs.Bigips[i].VxlanPort
-				// vxlanTunnelName := pkg.AllBigipConfigs.Bigips[i].VxlanTunnelName
-				vxlanLocalAddress := pkg.AllBigipConfigs.Bigips[i].VxlanLocalAddress
-				selfIpName := pkg.AllBigipConfigs.Bigips[i].SelfIpName
-				selfIpAddress := pkg.AllBigipConfigs.Bigips[i].SelfIpAddress
-
-				err := pkg.ConfigFlannel(bc, vxlanProfileName, vxlanPort, vxlanTunnelName, vxlanLocalAddress, selfIpName, selfIpAddress)
-				if err != nil {
-					setupLog.Error(err, "Check. some flannel related configs onto bigip unsuccessful: %s", err.Error())
-					os.Exit(1)
-				}
-			}
-		}
+	if err := getConfigs(&pkg.BIPConfigs, confDir); err != nil {
+		panic(err)
 	}
-
-	initConfig()
+	if err := setupBIGIPs(); err != nil {
+		panic(err)
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -197,8 +146,92 @@ func main() {
 
 	stopCh := make(chan struct{})
 
-	go pkg.Deployer(stopCh, pkg.ActiveSIGs.Bigips)
+	go pkg.Deployer(stopCh, pkg.BIGIPs)
 
+	setupReconcilers(mgr)
+
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	go pkg.ActiveSIGs.SyncAllResources(mgr)
+	go applyNodeConfigsAtStart()
+
+	setupLog.Info("starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+
+}
+
+func getCredentials(bigipPassword *string, credsDir string) error {
+	fn := credsDir + "/password"
+	if f, err := os.Open(fn); err != nil {
+		return err
+	} else {
+		defer f.Close()
+		if b, err := io.ReadAll(f); err != nil {
+			return err
+		} else {
+			*bigipPassword = string(b)
+		}
+		return nil
+	}
+}
+
+func getConfigs(bigipConfigs *pkg.BIGIPConfigs, confDir string) error {
+	fn := confDir + "/bigip-kubernetes-gateway-config"
+	f, err := os.Open(fn)
+	if err != nil {
+		return fmt.Errorf("failed to open file %s for reading: %s", fn, err.Error())
+	}
+	defer f.Close()
+	byaml, err := io.ReadAll(f)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %s: %s", fn, err)
+	}
+	if err := yaml.Unmarshal(byaml, &bigipConfigs); err != nil {
+		return fmt.Errorf("failed to unmarshal yaml content: %s", err.Error())
+	}
+	return nil
+}
+
+func applyNodeConfigsAtStart() {
+	for {
+		<-time.After(100 * time.Millisecond)
+		if pkg.ActiveSIGs.SyncedAtStart {
+			break
+		}
+	}
+
+	for _, c := range pkg.BIPConfigs {
+		if ncfgs, err := pkg.ParseNodeConfigs(&c); err != nil {
+			setupLog.Error(err, "unable to parse nodes config for net setup")
+			os.Exit(1)
+		} else {
+			if c.Management.Port == nil {
+				*c.Management.Port = 443
+			}
+			url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
+			pkg.PendingDeploys <- pkg.DeployRequest{
+				Meta:       "net setup at startup",
+				From:       nil,
+				To:         &ncfgs,
+				StatusFunc: func() {},
+				Partition:  "Common",
+				Context:    context.WithValue(context.TODO(), pkg.CtxKey_SpecifiedBIGIP, url),
+			}
+		}
+	}
+}
+
+func setupReconcilers(mgr manager.Manager) {
 	if err := (&controllers.GatewayClassReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -214,7 +247,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
 		os.Exit(1)
 	}
-	if err = (&controllers.HttpRouteReconciler{
+	if err := (&controllers.HttpRouteReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
@@ -222,81 +255,69 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controllers.SetupReconcilerForCoreV1WithManager(mgr); err != nil {
+	if err := controllers.SetupReconcilerForCoreV1WithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Endpoints")
 		os.Exit(1)
 	}
-
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
-	}
-
-	go pkg.ActiveSIGs.SyncAllResources(mgr)
-
-	go func() {
-		for {
-			<-time.After(100 * time.Millisecond)
-			if pkg.ActiveSIGs.SyncedAtStart {
-				break
-			}
-		}
-
-		if ncfgs, err := pkg.ParseNodeConfigs(); err != nil {
-			setupLog.Error(err, "unable to parse nodes config for net setup")
-			os.Exit(1)
-		} else {
-			pkg.PendingDeploys <- pkg.DeployRequest{
-				Meta:       "net setup at startup",
-				From:       nil,
-				To:         &ncfgs,
-				StatusFunc: func() {},
-				Partition:  "Common",
-				Context:    context.TODO(),
-			}
-		}
-	}()
-
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
-
 }
 
-func getCredentials(bigipPassword *string, credsDir string) error {
-	if len(credsDir) > 0 {
-		var pass string
-		if strings.HasSuffix(credsDir, "/") {
-			pass = credsDir + "password"
-		} else {
-			pass = credsDir + "/password"
+func setupBIGIPs() error {
+	errs := []string{}
+	for i, c := range pkg.BIPConfigs {
+		if c.Management == nil {
+			errs = append(errs, fmt.Sprintf("config #%d: missing management section", i))
+			continue
 		}
 
-		setField := func(field *string, filename, fieldType string) error {
-			fileBytes, readErr := ioutil.ReadFile(filename)
-			if readErr != nil {
-				setupLog.Info(fmt.Sprintf(
-					"No %s in credentials directory, falling back to CLI argument", fieldType))
-				if len(*field) == 0 {
-					return fmt.Errorf(fmt.Sprintf("BIG-IP %s not specified", fieldType))
-				}
-			} else {
-				*field = strings.TrimSpace(string(fileBytes))
+		if c.Management.Port == nil {
+			*c.Management.Port = 443
+		}
+		url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
+		username := c.Management.Username
+		bigip := f5_bigip.Initialize(url, username, pkg.BIPPassword, "debug")
+		pkg.BIGIPs = append(pkg.BIGIPs, bigip)
+
+		bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: context.TODO()}
+		if c.Calico != nil {
+			if err := pkg.EnableBGPRouting(bc); err != nil {
+				errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
+				continue
 			}
-			return nil
 		}
+		if c.Flannel != nil {
+			for _, tunnel := range c.Flannel.Tunnels {
+				vxlanProfileName := tunnel.ProfileName
+				vxlanPort := tunnel.Port
+				vxlanTunnelName := tunnel.Name
+				vxlanLocalAddress := tunnel.LocalAddress
 
-		err := setField(bigipPassword, pass, "password")
-		if err != nil {
-			return err
+				if err := bc.CreateVxlanProfile(vxlanProfileName, fmt.Sprintf("%d", vxlanPort)); err != nil {
+					errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
+					continue
+				}
+				if err := bc.CreateVxlanTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName); err != nil {
+					errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
+					continue
+				}
+			}
+			for _, selfip := range c.Flannel.SelfIPs {
+				selfIpName := selfip.Name
+				selfIpAddress := selfip.IpMask
+				selfIpTunnel := selfip.TunnelName
+
+				if err := bc.CreateSelf(selfIpName, selfIpAddress, selfIpTunnel); err != nil {
+					errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
+					continue
+				}
+			}
 		}
-
+		if c.K8S != nil {
+			// if possible to configure gateway integration in end-to-end automation.
+		}
 	}
-	return nil
+	if len(errs) != 0 {
+		return fmt.Errorf(strings.Join(errs, "; "))
+	} else {
+		return nil
+	}
 }
