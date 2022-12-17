@@ -177,44 +177,7 @@ func SetupReconcilerForCoreV1WithManager(mgr ctrl.Manager) error {
 	}
 }
 
-// func applyCfgs(gwc string, ocfgs, ncfgs map[string]interface{}) {
-// 	if reflect.DeepEqual(ocfgs, ncfgs) {
-// 		return
-// 	}
-// 	pkg.PendingDeploys <- pkg.DeployRequest{
-// 		Meta: "upserting svc/eps",
-// 		From: &ocfgs,
-// 		To:   &ncfgs,
-// 		StatusFunc: func() {
-// 			// do something
-// 		},
-// 		Partition: gwc,
-// 	}
-// }
-
 func handleDeletingEndpoints(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
-	// opcfgs, err := pkg.ParseServicesRelatedForAll()
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
-
-	// pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
-
-	// npcfgs, err := pkg.ParseServicesRelatedForAll()
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
-	// pkg.PendingDeploys <- pkg.DeployRequest{
-	// 	Meta: fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
-	// 	From: &opcfgs,
-	// 	To:   &npcfgs,
-	// 	StatusFunc: func() {
-	// 	},
-	// 	Partition: "cis-c-tenant",
-	// }
-
-	// return ctrl.Result{}, nil
 
 	svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
 
@@ -253,28 +216,6 @@ func handleDeletingEndpoints(ctx context.Context, req ctrl.Request) (ctrl.Result
 }
 
 func handleUpsertingEndpoints(ctx context.Context, obj *v1.Endpoints) (ctrl.Result, error) {
-
-	// opcfgs, err := pkg.ParseServicesRelatedForAll()
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
-
-	// pkg.ActiveSIGs.SetEndpoints(obj.DeepCopy())
-
-	// npcfgs, err := pkg.ParseServicesRelatedForAll()
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
-	// pkg.PendingDeploys <- pkg.DeployRequest{
-	// 	Meta: fmt.Sprintf("upserting endpoints '%s'", utils.Keyname(obj.Namespace, obj.Name)),
-	// 	From: &opcfgs,
-	// 	To:   &npcfgs,
-	// 	StatusFunc: func() {
-	// 	},
-	// 	Partition: "cis-c-tenant",
-	// }
-
-	// return ctrl.Result{}, nil
 
 	reqnsn := utils.Keyname(obj.Namespace, obj.Name)
 	svc := pkg.ActiveSIGs.GetService(reqnsn)
@@ -315,28 +256,6 @@ func handleUpsertingEndpoints(ctx context.Context, obj *v1.Endpoints) (ctrl.Resu
 
 func handleDeletingService(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
-	// opcfgs, err := pkg.ParseServicesRelatedForAll()
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
-
-	// pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
-
-	// npcfgs, err := pkg.ParseServicesRelatedForAll()
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
-	// pkg.PendingDeploys <- pkg.DeployRequest{
-	// 	Meta: fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
-	// 	From: &opcfgs,
-	// 	To:   &npcfgs,
-	// 	StatusFunc: func() {
-	// 	},
-	// 	Partition: "cis-c-tenant",
-	// }
-
-	// return ctrl.Result{}, nil
-
 	svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
 
 	found := false
@@ -375,28 +294,6 @@ func handleDeletingService(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 }
 
 func handleUpsertingService(ctx context.Context, obj *v1.Service) (ctrl.Result, error) {
-
-	// opcfgs, err := pkg.ParseServicesRelatedForAll()
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
-
-	// pkg.ActiveSIGs.SetService(obj.DeepCopy())
-
-	// npcfgs, err := pkg.ParseServicesRelatedForAll()
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
-	// pkg.PendingDeploys <- pkg.DeployRequest{
-	// 	Meta: fmt.Sprintf("upserting service '%s'", utils.Keyname(obj.Namespace, obj.Name)),
-	// 	From: &opcfgs,
-	// 	To:   &npcfgs,
-	// 	StatusFunc: func() {
-	// 	},
-	// 	Partition: "cis-c-tenant",
-	// }
-
-	// return ctrl.Result{}, nil
 
 	reqnsn := utils.Keyname(obj.Namespace, obj.Name)
 	svc := pkg.ActiveSIGs.GetService(reqnsn)

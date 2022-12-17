@@ -30,9 +30,6 @@ func init() {
 		Endpoints:      map[string]*v1.Endpoints{},
 		Service:        map[string]*v1.Service{},
 		GatewayClasses: map[string]*gatewayv1beta1.GatewayClass{},
-		// Node:      map[string]*v1.Node{},
-		// Mode:            "",
-		// VxlanTunnelName: "",
 	}
 }
 
@@ -148,28 +145,6 @@ func (c *SIGCache) UnsetService(keyname string) {
 
 	delete(c.Service, keyname)
 }
-
-// func (c *SIGCache) GetNode(name string) *v1.Node {
-// 	c.mutex.RLock()
-// 	defer c.mutex.RUnlock()
-
-// 	return c.Node[name]
-// }
-
-// func (c *SIGCache) GetAllNodeIPs() []string {
-// 	c.mutex.RLock()
-// 	defer c.mutex.RUnlock()
-
-// 	ips := []string{}
-// 	for _, n := range c.Node {
-// 		for _, addr := range n.Status.Addresses {
-// 			if addr.Type == v1.NodeInternalIP {
-// 				ips = append(ips, addr.Address)
-// 			}
-// 		}
-// 	}
-// 	return ips
-// }
 
 func (c *SIGCache) AttachedGateways(gtw *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
@@ -393,124 +368,6 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 
 	return hrs
 }
-
-// func (c *SIGCache) GetRelatedObjs(
-// 	gwObjs []*gatewayv1beta1.Gateway,
-// 	hrObjs []*gatewayv1beta1.HTTPRoute,
-// 	svcObjs []*v1.Service,
-// 	gwmap *map[string]*gatewayv1beta1.Gateway,
-// 	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
-// 	svcmap *map[string]*v1.Service) {
-
-// 	defer utils.TimeItToPrometheus()()
-
-// 	c.mutex.RLock()
-// 	defer c.mutex.RUnlock()
-
-// 	c._getRelatedObjs(gwObjs, hrObjs, svcObjs, gwmap, hrmap, svcmap)
-// }
-
-// func (c *SIGCache) _getRelatedObjs(
-// 	gwObjs []*gatewayv1beta1.Gateway,
-// 	hrObjs []*gatewayv1beta1.HTTPRoute,
-// 	svcObjs []*v1.Service,
-// 	gwmap *map[string]*gatewayv1beta1.Gateway,
-// 	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
-// 	svcmap *map[string]*v1.Service) {
-// 	for _, gwObj := range gwObjs {
-// 		if gwObj != nil {
-// 			name := utils.Keyname(gwObj.Namespace, gwObj.Name)
-// 			(*gwmap)[name] = c.Gateway[name]
-// 		}
-// 		hrs := c._attachedHTTPRoutes(gwObj)
-// 		for _, hr := range hrs {
-// 			name := utils.Keyname(hr.Namespace, hr.Name)
-// 			if _, ok := (*hrmap)[name]; !ok {
-// 				(*hrmap)[name] = c.HTTPRoute[name]
-// 				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}, gwmap, hrmap, svcmap)
-// 			}
-// 		}
-// 	}
-
-// 	for _, hrObj := range hrObjs {
-// 		if hrObj != nil {
-// 			name := utils.Keyname(hrObj.Namespace, hrObj.Name)
-// 			(*hrmap)[name] = c.HTTPRoute[name]
-// 		}
-// 		gws := c._gatewayRefsOf(hrObj)
-// 		for _, gw := range gws {
-// 			name := utils.Keyname(gw.Namespace, gw.Name)
-// 			if _, ok := (*gwmap)[name]; !ok {
-// 				(*gwmap)[name] = c.Gateway[name]
-// 				c._getRelatedObjs([]*gatewayv1beta1.Gateway{gw}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{}, gwmap, hrmap, svcmap)
-// 			}
-// 		}
-// 		svcs := c._serviceRefsOf(hrObj)
-// 		for _, svc := range svcs {
-// 			name := utils.Keyname(svc.Namespace, svc.Name)
-// 			if _, ok := (*svcmap)[name]; !ok {
-// 				(*svcmap)[name] = c.Service[name]
-// 				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{}, []*v1.Service{svc}, gwmap, hrmap, svcmap)
-// 			}
-// 		}
-// 	}
-
-// 	for _, svcObj := range svcObjs {
-// 		if svcObj != nil {
-// 			name := utils.Keyname(svcObj.Namespace, svcObj.Name)
-// 			(*svcmap)[name] = c.Service[name]
-// 		}
-// 		hrs := c._HTTPRoutesRefsOf(svcObj)
-// 		for _, hr := range hrs {
-// 			name := utils.Keyname(hr.Namespace, hr.Name)
-// 			if _, ok := (*hrmap)[name]; !ok {
-// 				(*hrmap)[name] = c.HTTPRoute[name]
-// 				c._getRelatedObjs([]*gatewayv1beta1.Gateway{}, []*gatewayv1beta1.HTTPRoute{hr}, []*v1.Service{}, gwmap, hrmap, svcmap)
-// 			}
-// 		}
-// 	}
-// }
-
-// func (c *SIGCache) GetGatewayRelated(
-// 	gwObjs []*gatewayv1beta1.Gateway,
-// 	gwmap *map[string]*gatewayv1beta1.Gateway,
-// 	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
-// 	svcmap *map[string]*v1.Service) {
-
-// 	defer utils.TimeItToPrometheus()()
-
-// 	c.mutex.RLock()
-// 	defer c.mutex.RUnlock()
-
-// 	c._getGatewayRelated(gwObjs, gwmap, hrmap, svcmap)
-// }
-
-// func (c *SIGCache) _getGatewayRelated(
-// 	gwObjs []*gatewayv1beta1.Gateway,
-// 	gwmap *map[string]*gatewayv1beta1.Gateway,
-// 	hrmap *map[string]*gatewayv1beta1.HTTPRoute,
-// 	svcmap *map[string]*v1.Service) {
-// 	for _, gwObj := range gwObjs {
-// 		if gwObj != nil {
-// 			name := utils.Keyname(gwObj.Namespace, gwObj.Name)
-// 			(*gwmap)[name] = c.Gateway[name]
-// 		}
-// 		hrs := c._attachedHTTPRoutes(gwObj)
-// 		for _, hr := range hrs {
-// 			name := utils.Keyname(hr.Namespace, hr.Name)
-// 			if _, ok := (*hrmap)[name]; !ok {
-// 				(*hrmap)[name] = hr
-// 				svcs := c._serviceRefsOf(hr)
-// 				for _, svc := range svcs {
-// 					name := utils.Keyname(svc.Namespace, svc.Name)
-// 					if _, ok := (*svcmap)[name]; !ok {
-// 						(*svcmap)[name] = svc
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-// }
 
 // GetNeighborGateways get neighbor gateways(itself is not included) for all gateway class.
 func (c *SIGCache) GetNeighborGateways(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {

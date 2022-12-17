@@ -62,18 +62,10 @@ spec:
         - name: bigip-kubernetes-gateway-pod
           image: jeffreycoho/bigip-kubernetes-gateway:12060066-20221206-153736
           imagePullPolicy: IfNotPresent
-          # env:
-          #   - name: BIGIP_PASSWORD
-          #     valueFrom:
-          #       secretKeyRef:
-          #         name: bigip-login
-          #         key: password
           command: ["/bigip-kubernetes-gateway-controller-linux"]
           args: [
             # "--bigip-password=p@ssw0rd123",
             "--controller-name=f5.io/gateway-controller-name",
-            "--mode=flannel",
-            "--vxlan-tunnel-name=fl-vxlan",
             "--bigip-config-directory=/bigip-config",
             "--bigip-credential-directory=/bigip-credential",
           ]

@@ -33,18 +33,7 @@ type SIGCache struct {
 	Endpoints      map[string]*v1.Endpoints
 	Service        map[string]*v1.Service
 	GatewayClasses map[string]*gatewayv1beta1.GatewayClass
-	// Node      map[string]*v1.Node
-	// Mode            string
-	// VxlanTunnelName string
 }
-
-type DepNode struct {
-	Key  string
-	Deps []*DepNode
-}
-
-// TODO: delete unused..
-type DepTrees []*DepNode
 
 type BIGIPConfigs []BIGIPConfig
 type BIGIPConfig struct {
