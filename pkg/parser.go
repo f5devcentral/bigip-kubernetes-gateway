@@ -9,45 +9,12 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-// func ParseRelated(gwObjs []*gatewayv1beta1.Gateway, hrObjs []*gatewayv1beta1.HTTPRoute, svcObjs []*v1.Service) (map[string]interface{}, error) {
-// 	defer utils.TimeItToPrometheus()()
-
-// 	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-// 	ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
-
-// 	rlt := map[string]interface{}{}
-// 	for _, gw := range gwmap {
-// 		if cfgs, err := ParseGateway(gw); err != nil {
-// 			return map[string]interface{}{}, err
-// 		} else {
-// 			for k, v := range cfgs {
-// 				rlt[k] = v
-// 			}
-// 		}
-// 	}
-// 	for _, hr := range hrmap {
-// 		if cfgs, err := ParseHTTPRoute(hr); err != nil {
-// 			return map[string]interface{}{}, err
-// 		} else {
-// 			for k, v := range cfgs {
-// 				rlt[k] = v
-// 			}
-// 		}
-// 	}
-
-// 	return map[string]interface{}{
-// 		"": rlt,
-// 	}, nil
-// }
-
 func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
 	if ActiveSIGs.GetGatewayClass(className) == nil {
 		return map[string]interface{}{}, nil
 	}
-	// gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-	// ActiveSIGs.GetRelatedObjs(gwObjs, hrObjs, svcObjs, &gwmap, &hrmap, &svcmap)
 
 	cgwObjs := []*gatewayv1beta1.Gateway{}
 	for _, gw := range gwObjs {
@@ -55,8 +22,6 @@ func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gate
 			cgwObjs = append(cgwObjs, gw)
 		}
 	}
-
-	// return ParseGatewayRelated(cgwObjs)
 
 	rlt := map[string]interface{}{}
 	for _, gw := range cgwObjs {
@@ -104,10 +69,6 @@ func ParseReferedServiceKeys(svcs []string) (map[string]interface{}, error) {
 			"name":    name,
 			"monitor": "min 1 of tcp",
 			"members": []interface{}{},
-
-			// "minActiveMembers": 0,
-			// TODO: there's at least one field for PATCH a pool. or we may need to fix that
-			// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
 		}
 		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
 			return rlt, err
@@ -227,110 +188,6 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 
 	return rlt, nil
 }
-
-// func ParseGatewayRelated(gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
-// 	defer utils.TimeItToPrometheus()()
-
-// 	gwmap, hrmap, svcmap := map[string]*gatewayv1beta1.Gateway{}, map[string]*gatewayv1beta1.HTTPRoute{}, map[string]*v1.Service{}
-// 	ActiveSIGs.GetGatewayRelated(gwObjs, &gwmap, &hrmap, &svcmap)
-
-// 	rlt := map[string]interface{}{}
-// 	for _, gw := range gwmap {
-// 		if cfgs, err := ParseGateway(gw); err != nil {
-// 			return map[string]interface{}{}, err
-// 		} else {
-// 			for k, v := range cfgs {
-// 				rlt[k] = v
-// 			}
-// 		}
-// 	}
-
-// 	// TODO: tune it.
-// 	className := ""
-// 	if len(gwObjs) == 0 {
-// 		return map[string]interface{}{}, fmt.Errorf("should not happen here")
-// 	} else {
-// 		className = string(gwObjs[0].Spec.GatewayClassName)
-// 	}
-// 	for _, hr := range hrmap {
-// 		if cfgs, err := ParseHTTPRoute(className, hr); err != nil {
-// 			return map[string]interface{}{}, err
-// 		} else {
-// 			for k, v := range cfgs {
-// 				rlt[k] = v
-// 			}
-// 		}
-// 	}
-
-// 	return map[string]interface{}{
-// 		"": rlt,
-// 	}, nil
-// }
-
-// func parsePoolsFrom(hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
-
-// 	creatPool := func(ns, n string, rlt map[string]interface{}) error {
-// 		name := strings.Join([]string{ns, n}, ".")
-// 		rlt["ltm/pool/"+name] = map[string]interface{}{
-// 			"name":    name,
-// 			"monitor": "min 1 of tcp",
-// 			"members": []interface{}{},
-
-// 			// "minActiveMembers": 0,
-// 			// TODO: there's at least one field for PATCH a pool. or we may need to fix that
-// 			// {"code":400,"message":"transaction failed:one or more properties must be specified","errorStack":[],"apiError":2}
-// 		}
-// 		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
-// 			return err
-// 		} else {
-// 			rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
-// 		}
-
-// 		if mon, err := parseMonitorFrom(ns, n); err != nil {
-// 			return err
-// 		} else {
-// 			rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
-// 		}
-
-// 		if err := parseArpsFrom(ns, n, rlt); err != nil {
-// 			return err
-// 		}
-// 		if err := parseNodesFrom(ns, n, rlt); err != nil {
-// 			return err
-// 		}
-// 		return nil
-// 	}
-
-// 	for _, rl := range hr.Spec.Rules {
-// 		for _, br := range rl.BackendRefs {
-// 			ns := hr.Namespace
-// 			if br.Namespace != nil {
-// 				ns = string(*br.Namespace)
-// 			}
-// 			if err := creatPool(ns, string(br.Name), rlt); err != nil {
-// 				return err
-// 			}
-// 		}
-// 	}
-
-// 	// pools from ExtensionRef as well.
-// 	for _, rl := range hr.Spec.Rules {
-// 		for _, fl := range rl.Filters {
-// 			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
-// 				er := fl.ExtensionRef
-// 				if er.Group != "" || er.Kind != "Service" {
-// 					return fmt.Errorf("resource %s of '%s' not supported", er.Name, utils.Keyname(string(er.Group), string(er.Kind)))
-// 				} else {
-// 					if err := creatPool(hr.Namespace, string(er.Name), rlt); err != nil {
-// 						return err
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	return nil
-// }
 
 // TODO: find the way to set monitor
 func parseMonitorFrom(svcNamespace, svcName string) (string, error) {
@@ -565,7 +422,6 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 		}
 		filterAction := strings.Join(filterActions, "\n")
 
-		// TODO: only the last backendRef is used.
 		for _, br := range rl.BackendRefs {
 			ns := hr.Namespace
 			if br.Namespace != nil {
@@ -582,7 +438,6 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 
 		namedi := strings.ReplaceAll(fmt.Sprintf("%s_%d", name, i), ".", "_")
 		namedi = strings.ReplaceAll(namedi, "-", "_")
-		// namedi := fmt.Sprintf("%s%s%d", hr.Namespace, hr.Name, i)
 		ruleInit := fmt.Sprintf(`
 
 			array unset weights *
