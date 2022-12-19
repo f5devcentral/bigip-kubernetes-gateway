@@ -15,57 +15,7 @@ func deploy(bc *f5_bigip.BIGIPContext, partition string, ocfgs, ncfgs *map[strin
 		return err
 	}
 	return bc.DoRestRequests(cmds)
-	// if err := bigip.DoRestRequests(cmds); err != nil {
-	// 	return err
-	// }
-	// if ncfgs == nil {
-	// 	slog.Debugf("deleting partition: %s", partition)
-	// 	return bigip.DeletePartition(partition)
-	// }
-	// return nil
 }
-
-// func filterPoolCfgs(ocfgs, ncfgs *map[string]interface{}) (*map[string]interface{}, *map[string]interface{}, error) {
-
-// 	ocfgsPool := map[string]interface{}{}
-// 	ncfgsPool := map[string]interface{}{}
-// 	if ocfgs != nil {
-// 		for fn, res := range *ocfgs {
-// 			if _, f := ocfgsPool[fn]; !f {
-// 				ocfgsPool[fn] = map[string]interface{}{}
-// 			}
-// 			fnmap := ocfgsPool[fn].(map[string]interface{})
-// 			if resJson, ok := res.(map[string]interface{}); !ok {
-// 				return nil, nil, fmt.Errorf("invalid resource format, should be json")
-// 			} else {
-// 				for tn, body := range resJson {
-// 					if strings.HasPrefix(tn, "ltm/pool/") || strings.HasPrefix(tn, "ltm/arp/") || strings.HasPrefix(tn, "ltm/node/") {
-// 						fnmap[tn] = body
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-// 	if ncfgs != nil {
-// 		for fn, res := range *ncfgs {
-// 			if _, f := ncfgsPool[fn]; !f {
-// 				ncfgsPool[fn] = map[string]interface{}{}
-// 			}
-// 			fnmap := ncfgsPool[fn].(map[string]interface{})
-// 			if resJson, ok := res.(map[string]interface{}); !ok {
-// 				return nil, nil, fmt.Errorf("invalid resource format, should be json")
-// 			} else {
-// 				for tn, body := range resJson {
-// 					if strings.HasPrefix(tn, "ltm/pool/") || strings.HasPrefix(tn, "ltm/arp/") || strings.HasPrefix(tn, "ltm/node/") {
-// 						fnmap[tn] = body
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	return &ocfgsPool, &ncfgsPool, nil
-// }
 
 func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 	for {
