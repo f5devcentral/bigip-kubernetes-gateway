@@ -32,8 +32,9 @@ data:
           - name: flannel-self
             ipMask: 10.42.20.1/16
             tunnelName: fl-tunnel
-      # calico:
-      #   kindsOfConfigItems: ""
+      calico:
+        localAS: &as 64512
+        remoteAS: *as
 
 ---
 

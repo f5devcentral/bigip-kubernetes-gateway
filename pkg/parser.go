@@ -541,7 +541,7 @@ func ParseNodeConfigs(bc *BIGIPConfig) (map[string]interface{}, error) {
 
 	if bc.Calico != nil {
 		nIpAddresses := k8s.NodeCache.AllIpAddresses()
-		if ccfgs, err := parseNeighsFrom("gwcBGP", "64512", "64512", nIpAddresses); err != nil {
+		if ccfgs, err := parseNeighsFrom("gwcBGP", bc.Calico.LocalAS, bc.Calico.RemoteAS, nIpAddresses); err != nil {
 			return map[string]interface{}{}, err
 		} else {
 			for k, v := range ccfgs {
