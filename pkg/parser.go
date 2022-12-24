@@ -413,24 +413,24 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 					`, setScheme, setHostName, setUri, setPort, *rr.StatusCode))
 				}
 			// <gateway:experimental>
-			case gatewayv1beta1.HTTPRouteFilterURLRewrite:
-				if ur := filter.URLRewrite; ur != nil {
-					setHostname := `set rhostname [HTTP::host]`
-					if ur.Hostname != nil {
-						setHostname = fmt.Sprintf(`set rhostname "%s"`, *ur.Hostname)
-					}
-					// experimental .. definition is not clear yet.
-					setPath := `set rpath [HTTP::path]`
-					if ur.Path != nil && ur.Path.ReplaceFullPath != nil {
-						setPath = fmt.Sprintf(`set rpath "%s"`, *ur.Path.ReplaceFullPath)
-					}
-					filterActions = append(filterActions, fmt.Sprintf(`
-						%s
-						%s
-						[HTTP::header replace Host $rhostname]
-						HTTP::uri $rpath
-					`, setHostname, setPath))
-				}
+			// case gatewayv1beta1.HTTPRouteFilterURLRewrite:
+			// 	if ur := filter.URLRewrite; ur != nil {
+			// 		setHostname := `set rhostname [HTTP::host]`
+			// 		if ur.Hostname != nil {
+			// 			setHostname = fmt.Sprintf(`set rhostname "%s"`, *ur.Hostname)
+			// 		}
+			// 		// experimental .. definition is not clear yet.
+			// 		setPath := `set rpath [HTTP::path]`
+			// 		if ur.Path != nil && ur.Path.ReplaceFullPath != nil {
+			// 			setPath = fmt.Sprintf(`set rpath "%s"`, *ur.Path.ReplaceFullPath)
+			// 		}
+			// 		filterActions = append(filterActions, fmt.Sprintf(`
+			// 			%s
+			// 			%s
+			// 			[HTTP::header replace Host $rhostname]
+			// 			HTTP::uri $rpath
+			// 		`, setHostname, setPath))
+			// 	}
 			case gatewayv1beta1.HTTPRouteFilterExtensionRef:
 				if er := filter.ExtensionRef; er != nil {
 					pool := fmt.Sprintf("%s.%s", hr.Namespace, er.Name)

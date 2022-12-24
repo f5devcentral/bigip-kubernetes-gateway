@@ -1,4 +1,4 @@
-# Gateway API Compatibility
+# Gateway API Compatibility(v0.5.1)
 
 This document describes which Gateway API resources BIG-IP Kubernetes Gateway supports and the extent of that support.
 
@@ -9,11 +9,9 @@ This document describes which Gateway API resources BIG-IP Kubernetes Gateway su
 | [GatewayClass](#gatewayclass) | Partially supported |
 | [Gateway](#gateway) | Partially supported |
 | [HTTPRoute](#httproute) | Partially supported |
-| [TLSRoute](#tlsroute) | Not supported |
-| [TCPRoute](#tcproute) | Not supported |
-| [UDPRoute](#udproute) | Not supported |
-| [ReferenceGrant](#referencegrant) |  Not supported |
-| [Custom policies](#custom-policies) | Not supported |
+| [TLSRoute](#tlsroute) | Not supported, experimental in v0.5.1 |
+| [TCPRoute](#tcproute) | Not supported, experimental in v0.5.1 |
+| [UDPRoute](#udproute) | Not supported, experimental in v0.5.1 |
 
 ## Terminology
 
@@ -32,17 +30,16 @@ For a description of each field, visit the [Gateway API documentation](https://g
 
 ### GatewayClass 
 
-> Status: Partially supported. 
+> Status: Partially supported.
 
 BIG-IP Kubernetes Gateway supports the coexistence of multiple gatewayClasses, and their `controllerName` field determines which controller handles this gatewayclass resource. Each GatewayClass is represented as an independent partition on BIG-IP.
 
 Fields:
 * `spec`
 	* `controllerName` - supported.
-	* `parametersRef` - not supported. 
-	* `description` - supported.
-* `status`
-	* `conditions` - partially supported.
+	* `parametersRef` - will not support. 
+	* `description` - not supported.
+* `status` - not supported.
 
 ### Gateway
 
@@ -61,7 +58,10 @@ Fields:
 		* `tls` - not supported.
 		  * `options` - not supported.
 		* `allowedRoutes` - not supported. 
-	* `addresses` - supported.
+	* `addresses` - partially upported.
+	    * type `IPAddress`: supported.
+		* type `Hostname`: will not support.
+		* type `NamedAddress`: will not support.
 * `status`
   * `addresses` - not supported.
   * `conditions` - not supported.
@@ -69,7 +69,7 @@ Fields:
 	* `name` - not supported.
 	* `supportedKinds` - not supported.
 	* `attachedRoutes` - not supported.
-	* `conditions` - partially supported.
+	* `conditions` - not supported.
 
 ### HTTPRoute
 
@@ -77,7 +77,11 @@ Fields:
 
 Fields:
 * `spec`
-  * `parentRefs` - partially supported. `sectionName` must always be set. 
+  * `parentRefs` - partially supported.
+    * `group` `kind`: partially supported, only for `Gateway`.
+	* `namespace` `name`: supported.
+    * `sectionName` must always be set.
+	* `port`: will not support. 
   * `hostnames` - supported. 
   * `rules`
 	* `matches`
@@ -90,11 +94,13 @@ Fields:
 		* `requestRedirect` - supported. 
 		* `requestHeaderModifier` - supported.
         * `requestMirror` - not supported.
-        * `urlRewrite` - supported.
+        * `urlRewrite` - supported, experimental in v0.5.1.
         * `extensionRef` - partially supported, only v1.Service.
-	* `backendRefs` - partially supported. Backend ref `filters` are not supported.
-* `status`
-  * `parents`
+	* `backendRefs` - partially supported.
+	    * `group` `kind` partially supported. only v1.Service. 
+		* Backend ref `filters` will not support.
+* `status` - not supported.
+  * `parents` - not supported.
 	* `parentRef` - not supported.
 	* `controllerName` - not supported.
 	* `conditions` - not supported.
@@ -108,13 +114,5 @@ Fields:
 > Status: Not supported.
 
 ### UDPRoute
-
-> Status: Not supported.
-
-### ReferenceGrant
-
-> Status: Not supported.
-
-### Custom Policies
 
 > Status: Not supported.
