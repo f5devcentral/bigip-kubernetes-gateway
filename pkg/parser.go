@@ -462,6 +462,7 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 		`, ruleCondition, filterAction, fmt.Sprintf(`
 			set pool $static::pools_%s([expr {int(rand()*$static::pools_%s_size)}])
 			pool $pool
+			return
 		`, namedi, namedi)))
 
 		ruleInits = append(ruleInits, ruleInit)
