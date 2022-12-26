@@ -56,7 +56,8 @@ type BIGIPConfig struct {
 		} `yaml:"selfIPs"`
 	}
 	Calico *struct {
-		KindsOfConfigItems string `yaml:"kindsOfConfigItems"`
+		LocalAS  string `yaml:"localAS"`
+		RemoteAS string `yaml:"remoteAS"`
 	}
 	K8S *struct {
 		// if needed
