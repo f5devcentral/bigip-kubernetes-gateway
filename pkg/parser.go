@@ -504,7 +504,6 @@ func parseNeighsFrom(routerName, localAs, remoteAs string, addresses []string) (
 
 	fmtneigs := []interface{}{}
 	for _, address := range addresses {
-		// slog.Infof("parse this address: %s", address)
 		fmtneigs = append(fmtneigs, map[string]interface{}{
 			"name":     address,
 			"remoteAs": remoteAs,
@@ -525,7 +524,6 @@ func parseFdbsFrom(tunnelName string, iPToMac map[string]string) (map[string]int
 
 	fmtrecords := []interface{}{}
 	for ip, mac := range iPToMac {
-		// slog.Infof("parse ip address: %s and mac: %s", ip, mac)
 		fmtrecords = append(fmtrecords, map[string]string{
 			"name":     mac,
 			"endpoint": ip,

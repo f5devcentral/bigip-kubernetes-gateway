@@ -29,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "k8s.io/api/core/v1"
 )
@@ -52,9 +51,8 @@ type NodeReconciler struct {
 func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
 	var obj v1.Endpoints
-	// zlog := log.FromContext(ctx)
 	// // too many logs.
-	// zlog.V(1).Info("endpoint event: " + req.NamespacedName.String())
+	// slog.Debugf("endpoint event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			defer pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
@@ -69,11 +67,10 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
 	var obj v1.Service
-	zlog := log.FromContext(ctx)
 	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
-	zlog.V(1).Info("Service event: " + req.NamespacedName.String())
+	slog := utils.LogFromContext(lctx)
+	slog.Debugf("Service event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			defer pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
@@ -98,8 +95,6 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	ncfgs := map[string]interface{}{}
 
 	var obj v1.Node
-	// zlog := log.FromContext(ctx)
-	// zlog.V(1).Info("resource event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			k8s.NodeCache.Unset(req.Name)

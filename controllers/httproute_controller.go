@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
@@ -47,8 +46,8 @@ type HttpRouteReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
 	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	slog := utils.LogFromContext(lctx)
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)
 		return ctrl.Result{Requeue: true}, nil
@@ -56,7 +55,7 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	var obj gatewayv1beta1.HTTPRoute
 
-	zlog.V(1).Info("handling " + req.NamespacedName.String())
+	slog.Debugf("handling " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
@@ -85,7 +84,6 @@ func (r *HttpRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// zlog := log.FromContext(ctx)
 	hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
 	gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
 	drs := map[string]*pkg.DeployRequest{}
@@ -158,9 +156,9 @@ func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result
 }
 
 func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
+	slog := utils.LogFromContext(ctx)
 	reqnsn := utils.Keyname(obj.Namespace, obj.Name)
-	zlog.V(1).Info("upserting " + reqnsn)
+	slog.Debugf("upserting " + reqnsn)
 
 	hr := pkg.ActiveSIGs.GetHTTPRoute(reqnsn)
 	gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
