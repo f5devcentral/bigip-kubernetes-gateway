@@ -33,6 +33,7 @@ type SIGCache struct {
 	Endpoints      map[string]*v1.Endpoints
 	Service        map[string]*v1.Service
 	GatewayClasses map[string]*gatewayv1beta1.GatewayClass
+	Namespaces     map[string]*v1.Namespace
 }
 
 type BIGIPConfigs []BIGIPConfig

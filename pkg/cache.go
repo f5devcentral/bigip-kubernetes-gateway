@@ -18,6 +18,7 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 func init() {
@@ -31,7 +32,24 @@ func init() {
 		Endpoints:      map[string]*v1.Endpoints{},
 		Service:        map[string]*v1.Service{},
 		GatewayClasses: map[string]*gatewayv1beta1.GatewayClass{},
+		Namespaces:     map[string]*v1.Namespace{},
 	}
+}
+
+func (c *SIGCache) SetNamespace(obj *v1.Namespace) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if obj != nil {
+		c.Namespaces[obj.Name] = obj
+	}
+}
+
+func (c *SIGCache) UnsetNamespace(keyname string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	delete(c.Namespaces, keyname)
 }
 
 func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
@@ -211,6 +229,15 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 		return []*gatewayv1beta1.HTTPRoute{}
 	}
 
+	allowedRoutes := map[string]*gatewayv1beta1.AllowedRoutes{}
+	for _, listener := range gw.Spec.Listeners {
+		vsname := gwListenerName(gw, &listener)
+
+		if listener.AllowedRoutes != nil {
+			allowedRoutes[vsname] = listener.AllowedRoutes
+		}
+	}
+
 	hrs := []*gatewayv1beta1.HTTPRoute{}
 	for _, hr := range ActiveSIGs.HTTPRoute {
 		for _, pr := range hr.Spec.ParentRefs {
@@ -219,7 +246,14 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 				ns = string(*pr.Namespace)
 			}
 			if utils.Keyname(ns, string(pr.Name)) == utils.Keyname(gw.Namespace, gw.Name) {
-				hrs = append(hrs, hr)
+				vsname := hrParentName(hr, &pr)
+				if _, ok := allowedRoutes[vsname]; ok {
+					allowed := allowedRoutes[vsname]
+					matched := namespaceMatches(gw.Namespace, allowed.Namespaces, hr.Namespace)
+					if matched {
+						hrs = append(hrs, hr)
+					}
+				}
 			}
 		}
 	}
@@ -438,6 +472,7 @@ func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 			c.Endpoints[utils.Keyname(eps.Namespace, eps.Name)] = eps.DeepCopy()
 		}
 	}
+
 	if svcList, err := kubeClient.CoreV1().Services(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
 		return err
 	} else {
@@ -446,6 +481,16 @@ func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 			c.Service[utils.Keyname(svc.Namespace, svc.Name)] = svc.DeepCopy()
 		}
 	}
+
+	if nsList, err := kubeClient.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{}); err != nil {
+		return nil
+	} else {
+		for _, ns := range nsList.Items {
+			slog.Debugf("found ns: %s", ns.Name)
+			c.Namespaces[ns.Name] = ns.DeepCopy()
+		}
+	}
+
 	if nList, err := kubeClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{}); err != nil {
 		return err
 	} else {
@@ -539,4 +584,25 @@ func (c *SIGCache) SyncAllResources(mgr manager.Manager) {
 
 	slog.Infof("Finished syncing resources to local")
 	c.SyncedAtStart = true
+}
+
+func namespaceMatches(gwNamespace string, namespaces *gatewayv1beta1.RouteNamespaces, routeNamespace string) bool {
+	selector, _ := metav1.LabelSelectorAsSelector(namespaces.Selector)
+
+	if namespaces == nil || namespaces.From == nil {
+		return true
+	}
+
+	switch *namespaces.From {
+	case gatewayv1beta1.NamespacesFromAll:
+		return true
+	case gatewayv1beta1.NamespacesFromSame:
+		return gwNamespace == routeNamespace
+	case gatewayv1beta1.NamespacesFromSelector:
+		if routeNs := ActiveSIGs.Namespaces[routeNamespace]; routeNs != nil {
+			return selector.Matches(labels.Set(routeNs.Labels))
+		}
+	}
+
+	return true
 }
