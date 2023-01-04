@@ -122,23 +122,41 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	}
 
 	rlt := map[string]interface{}{}
+	irules := map[string][]string{}
+
+	for _, listener := range gw.Spec.Listeners {
+		if listener.Hostname != nil {
+			vsname := gwListenerName(gw, &listener)
+			if _, ok := irules[vsname]; !ok {
+				irules[vsname] = []string{}
+			}
+			irules[vsname] = append(irules[vsname], vsname)
+			rule := map[string]interface{}{
+				"name": vsname,
+				"apiAnonymous": fmt.Sprintf(`
+					when HTTP_REQUEST {
+						if { not ([HTTP::host] matches "%s") } {
+							event HTTP_REQUEST disable
+						}
+					}
+				`, *listener.Hostname),
+			}
+			rlt["ltm/rule/"+vsname] = rule
+		}
+	}
 
 	hrs := ActiveSIGs.AttachedHTTPRoutes(gw)
-	irules := map[string][]string{}
 	for _, hr := range hrs {
 		for _, pr := range hr.Spec.ParentRefs {
-			ns := hr.Namespace
-			if pr.Namespace != nil {
-				ns = string(*pr.Namespace)
-			}
+
 			if pr.SectionName == nil {
-				return map[string]interface{}{}, fmt.Errorf("sectionName of paraentRefs is nil, not supported yet")
+				return map[string]interface{}{}, fmt.Errorf("sectionName of paraentRefs is nil, not supported")
 			}
-			listener := strings.Join([]string{ns, string(pr.Name), string(*pr.SectionName)}, ".")
-			if _, ok := irules[listener]; !ok {
-				irules[listener] = []string{}
+			vsname := hrParentName(hr, &pr)
+			if _, ok := irules[vsname]; !ok {
+				irules[vsname] = []string{}
 			}
-			irules[listener] = append(irules[listener], strings.Join([]string{hr.Namespace, hr.Name}, "."))
+			irules[vsname] = append(irules[vsname], hrName(hr))
 		}
 	}
 	for _, addr := range gw.Spec.Addresses {
@@ -165,7 +183,7 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 				if utils.IsIpv6(ipaddr) {
 					destination = fmt.Sprintf("%s.%d", ipaddr, listener.Port)
 				}
-				name := strings.Join([]string{gw.Namespace, gw.Name, string(listener.Name)}, ".")
+				name := gwListenerName(gw, &listener)
 
 				rlt["ltm/virtual/"+name] = map[string]interface{}{
 					"name":        name,
@@ -265,7 +283,7 @@ func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) er
 }
 
 func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
-	name := strings.Join([]string{hr.Namespace, hr.Name}, ".")
+	name := hrName(hr)
 
 	// hostnames
 	hostnameConditions := []string{}
@@ -395,24 +413,24 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 					`, setScheme, setHostName, setUri, setPort, *rr.StatusCode))
 				}
 			// <gateway:experimental>
-			case gatewayv1beta1.HTTPRouteFilterURLRewrite:
-				if ur := filter.URLRewrite; ur != nil {
-					setHostname := `set rhostname [HTTP::host]`
-					if ur.Hostname != nil {
-						setHostname = fmt.Sprintf(`set rhostname "%s"`, *ur.Hostname)
-					}
-					// experimental .. definition is not clear yet.
-					setPath := `set rpath [HTTP::path]`
-					if ur.Path != nil && ur.Path.ReplaceFullPath != nil {
-						setPath = fmt.Sprintf(`set rpath "%s"`, *ur.Path.ReplaceFullPath)
-					}
-					filterActions = append(filterActions, fmt.Sprintf(`
-						%s
-						%s
-						[HTTP::header replace Host $rhostname]
-						HTTP::uri $rpath
-					`, setHostname, setPath))
-				}
+			// case gatewayv1beta1.HTTPRouteFilterURLRewrite:
+			// 	if ur := filter.URLRewrite; ur != nil {
+			// 		setHostname := `set rhostname [HTTP::host]`
+			// 		if ur.Hostname != nil {
+			// 			setHostname = fmt.Sprintf(`set rhostname "%s"`, *ur.Hostname)
+			// 		}
+			// 		// experimental .. definition is not clear yet.
+			// 		setPath := `set rpath [HTTP::path]`
+			// 		if ur.Path != nil && ur.Path.ReplaceFullPath != nil {
+			// 			setPath = fmt.Sprintf(`set rpath "%s"`, *ur.Path.ReplaceFullPath)
+			// 		}
+			// 		filterActions = append(filterActions, fmt.Sprintf(`
+			// 			%s
+			// 			%s
+			// 			[HTTP::header replace Host $rhostname]
+			// 			HTTP::uri $rpath
+			// 		`, setHostname, setPath))
+			// 	}
 			case gatewayv1beta1.HTTPRouteFilterExtensionRef:
 				if er := filter.ExtensionRef; er != nil {
 					pool := fmt.Sprintf("%s.%s", hr.Namespace, er.Name)

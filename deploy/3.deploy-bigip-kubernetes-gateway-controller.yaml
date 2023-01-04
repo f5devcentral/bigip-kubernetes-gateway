@@ -32,9 +32,9 @@ data:
           - name: flannel-self
             ipMask: 10.42.20.1/16
             tunnelName: fl-tunnel
-      calico:
-        localAS: &as 64512
-        remoteAS: *as
+      # calico:
+      #   localAS: &as 64512
+      #   remoteAS: *as
 
 ---
 
@@ -56,16 +56,15 @@ spec:
     spec:
       serviceAccountName: k8s-bigip-ctlr
       nodeSelector:
-        node-role.kubernetes.io/control-plane: "true"
+        # node-role.kubernetes.io/control-plane: "true"
         # node-role.kubernetes.io/master: "true"
       containers:
         # kubectl logs -f deployment/bigip-kubernetes-gateway -c bigip-kubernetes-gateway-pod -n kube-system
         - name: bigip-kubernetes-gateway-pod
-          image: jeffreycoho/bigip-kubernetes-gateway:12060066-20221206-153736
+          image: f5devcentral/bigip-kubernetes-gateway:v0.1.0-20221226
           imagePullPolicy: IfNotPresent
           command: ["/bigip-kubernetes-gateway-controller-linux"]
           args: [
-            # "--bigip-password=p@ssw0rd123",
             "--controller-name=f5.io/gateway-controller-name",
             "--bigip-config-directory=/bigip-config",
             "--bigip-credential-directory=/bigip-credential",
