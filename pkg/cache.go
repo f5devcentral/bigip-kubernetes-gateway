@@ -51,6 +51,13 @@ func (c *SIGCache) UnsetNamespace(keyname string) {
 	delete(c.Namespace, keyname)
 }
 
+func (c *SIGCache) GetNamespace(keyname string) *v1.Namespace {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	return c.Namespace[keyname]
+}
+
 func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -208,7 +215,17 @@ func (c *SIGCache) _gatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta
 		}
 		name := utils.Keyname(utils.Keyname(ns, string(pr.Name)))
 		if gw, ok := c.Gateway[name]; ok {
-			gws = append(gws, gw)
+			for _, listener := range gw.Spec.Listeners {
+				if listener.Name != *pr.SectionName {
+					continue
+				}
+				routetype := reflect.TypeOf(*hr).Name()
+				if routeMatches(gw.Namespace, &listener, ActiveSIGs.Namespace[hr.Namespace], routetype) {
+					gws = append(gws, gw)
+					break
+				}
+			}
+
 		}
 	}
 	return gws
@@ -228,13 +245,13 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 		return []*gatewayv1beta1.HTTPRoute{}
 	}
 
-	allowedRoutes := map[string]*gatewayv1beta1.AllowedRoutes{}
-	for _, listener := range gw.Spec.Listeners {
-		vsname := gwListenerName(gw, &listener)
-
-		if listener.AllowedRoutes != nil {
-			allowedRoutes[vsname] = listener.AllowedRoutes
-		}
+	listeners := map[string]*gatewayv1beta1.Listener{}
+	// &listener, the local variable, will point to the latest listener
+	// it can be used but cannot be taken way.
+	// for _, listener := range gw.Spec.Listeners {  wrong!
+	for i := range gw.Spec.Listeners {
+		vsname := gwListenerName(gw, &gw.Spec.Listeners[i])
+		listeners[vsname] = &gw.Spec.Listeners[i]
 	}
 
 	hrs := []*gatewayv1beta1.HTTPRoute{}
@@ -246,13 +263,11 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 			}
 			if utils.Keyname(ns, string(pr.Name)) == utils.Keyname(gw.Namespace, gw.Name) {
 				vsname := hrParentName(hr, &pr)
-				if allowed, ok := allowedRoutes[vsname]; ok {
-					if routeNs, ok := ActiveSIGs.Namespace[hr.Namespace]; ok {
-						matched := namespaceMatches(gw.Namespace, allowed.Namespaces, routeNs)
-						if matched {
-							hrs = append(hrs, hr)
-						}
-					}
+				routeNamespace := ActiveSIGs.Namespace[hr.Namespace]
+				routetype := reflect.TypeOf(*hr).Name()
+				if routeMatches(gw.Namespace, listeners[vsname], routeNamespace, routetype) {
+					hrs = append(hrs, hr)
+					break
 				}
 			}
 		}
