@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
@@ -48,15 +47,15 @@ type GatewayReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
 	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	slog := utils.LogFromContext(lctx)
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)
 		return ctrl.Result{Requeue: true}, nil
 	}
 	var obj gatewayv1beta1.Gateway
 
-	zlog.V(1).Info("handling " + req.NamespacedName.String())
+	slog.Debugf("handling " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
@@ -80,7 +79,7 @@ func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func handleDeletingGateway(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
+	slog := utils.LogFromContext(ctx)
 
 	gw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
 	// Only when we know all the gateways can we know exactly which routes need to be cleared because of this gateway event.
@@ -97,7 +96,7 @@ func handleDeletingGateway(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 		return ctrl.Result{}, err
 	}
 
-	zlog.V(1).Info("handling + deleting " + req.NamespacedName.String())
+	slog.Debugf("handling + deleting " + req.NamespacedName.String())
 	pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
 
 	if ncfgs, err = pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
@@ -132,10 +131,10 @@ func handleDeletingGateway(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 }
 
 func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
+	slog := utils.LogFromContext(ctx)
 
 	reqnsn := utils.Keyname(obj.Namespace, obj.Name)
-	zlog.V(1).Info("handling + upserting " + reqnsn)
+	slog.Debugf("handling + upserting " + reqnsn)
 
 	ogw := pkg.ActiveSIGs.GetGateway(reqnsn)
 	if ogw == nil {
@@ -152,7 +151,7 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 		opcfgs, npcfgs := map[string]interface{}{}, map[string]interface{}{}
 		ocfgs, err = pkg.ParseGatewayRelatedForClass(string(ogw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ogw})
 		if err != nil {
-			zlog.Error(err, "handling + upserting + parse related ocfgs "+reqnsn)
+			slog.Errorf("handling + upserting + parse related ocfgs: %s %s", reqnsn, err.Error())
 			return ctrl.Result{}, err
 		}
 		opcfgs, err = pkg.ParseServicesRelatedForAll()
@@ -164,7 +163,7 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 
 		ncfgs, err = pkg.ParseGatewayRelatedForClass(string(ngw.Spec.GatewayClassName), []*gatewayv1beta1.Gateway{ngw})
 		if err != nil {
-			zlog.Error(err, "handling + upserting + parse related ncfgs "+reqnsn)
+			slog.Errorf("handling + upserting + parse related ncfgs: %s %s", reqnsn, err.Error())
 			return ctrl.Result{}, err
 		}
 		npcfgs, err = pkg.ParseServicesRelatedForAll()
