@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -48,8 +47,8 @@ type GatewayClassReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
 	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	slog := utils.LogFromContext(lctx)
 	if req.Namespace != "" {
 		return ctrl.Result{}, fmt.Errorf("gateway class namespace must be ''")
 	}
@@ -60,7 +59,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	var obj gatewayv1beta1.GatewayClass
-	zlog.V(1).Info("handling gatewayclass " + req.Name)
+	slog.Debugf("handling gatewayclass " + req.Name)
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			defer pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
@@ -85,10 +84,10 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// 1.671457016981118e+09	DEBUG	handling gatewayclass bigip	{"controller": "gatewayclass", "controllerGroup": "gateway.networking.k8s.io", "controllerKind": "GatewayClass", "GatewayClass": {"name":"bigip"}, "namespace": "", "name": "bigip", "reconcileID": "bcd01fdd-8dfc-4be9-b3ab-c3d3a3fdb67e"}
 		// 1.6714570170091689e+09	ERROR	unable to update status	{"controller": "gatewayclass", "controllerGroup": "gateway.networking.k8s.io", "controllerKind": "GatewayClass", "GatewayClass": {"name":"bigip"}, "namespace": "", "name": "bigip", "reconcileID": "bcd01fdd-8dfc-4be9-b3ab-c3d3a3fdb67e", "error": "Operation cannot be fulfilled on gatewayclasses.gateway.networking.k8s.io \"bigip\": the object has been modified; please apply your changes to the latest version and try again"}
 		if err := r.Status().Update(ctx, ngwc); err != nil {
-			zlog.V(1).Error(err, "unable to update status")
+			slog.Errorf("unable to update status: %s", err.Error())
 			return ctrl.Result{}, err
 		} else {
-			zlog.V(1).Info("status updated")
+			slog.Debugf("status updated")
 		}
 
 		// upsert gatewayclass
@@ -105,8 +104,8 @@ func (r *GatewayClassReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
-	zlog.V(1).Info("deleting gatewayclass " + req.Name)
+	slog := utils.LogFromContext(ctx)
+	slog.Debugf("deleting gatewayclass " + req.Name)
 
 	gwc := pkg.ActiveSIGs.GetGatewayClass(req.Name)
 	if gwc == nil {
@@ -156,14 +155,14 @@ func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Res
 }
 
 func handleUpsertingGatewayClass(ctx context.Context, obj *gatewayv1beta1.GatewayClass) (ctrl.Result, error) {
-	zlog := log.FromContext(ctx)
+	slog := utils.LogFromContext(ctx)
 
 	reqn := utils.Keyname(obj.Namespace, obj.Name)
-	zlog.V(1).Info("upserting gatewayclass " + reqn)
+	slog.Debugf("upserting gatewayclass " + reqn)
 	ngwc := obj.DeepCopy()
 
 	if ngwc.Spec.ControllerName != gatewayv1beta1.GatewayController(pkg.ActiveSIGs.ControllerName) {
-		zlog.V(1).Info("ignore this gwc " + reqn + " as its controllerName does not match " + pkg.ActiveSIGs.ControllerName)
+		slog.Debugf("ignore this gwc " + reqn + " as its controllerName does not match " + pkg.ActiveSIGs.ControllerName)
 		return ctrl.Result{}, nil
 	}
 

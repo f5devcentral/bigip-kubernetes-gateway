@@ -28,6 +28,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v3"
@@ -72,8 +73,6 @@ func main() {
 		credsDir             string
 		confDir              string
 		controllerName       string
-		// mode                 string
-		// vxlanTunnelName      string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -94,25 +93,11 @@ func main() {
 	flag.Parse()
 
 	pkg.ActiveSIGs.ControllerName = controllerName
-
-	// TODO: the filenames must be 'bigip-kubernetes-gateway-config' and 'password'
-	if confDir == "" || credsDir == "" {
-		err := fmt.Errorf("missing BIG-IP credential/configuration parameters")
-		setupLog.Error(err, "Missing BIG-IP credentials info: %s", err.Error())
-		panic(err)
+	if err := setupBIGIPs(credsDir, confDir); err != nil {
+		setupLog.Error(err, "failed to setup BIG-IPs")
+		os.Exit(1)
 	}
-	if err := getCredentials(&pkg.BIPPassword, credsDir); err != nil {
-		panic(err)
-	}
-	if err := getConfigs(&pkg.BIPConfigs, confDir); err != nil {
-		panic(err)
-	}
-	if err := setupBIGIPs(); err != nil {
-		panic(err)
-	}
-
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
@@ -141,15 +126,9 @@ func main() {
 	prometheus.MustRegister(utils.FunctionDurationTimeCostTotal)
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostCount)
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostTotal)
-
 	mgr.AddMetricsExtraHandler("/stats", promhttp.Handler())
 
-	stopCh := make(chan struct{})
-
-	go pkg.Deployer(stopCh, pkg.BIGIPs)
-
 	setupReconcilers(mgr)
-
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
@@ -159,6 +138,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	stopCh := make(chan struct{})
+	go pkg.Deployer(stopCh, pkg.BIGIPs)
 	go pkg.ActiveSIGs.SyncAllResources(mgr)
 	go applyNodeConfigsAtStart()
 
@@ -167,7 +148,6 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-
 }
 
 func getCredentials(bigipPassword *string, credsDir string) error {
@@ -210,6 +190,7 @@ func applyNodeConfigsAtStart() {
 		}
 	}
 
+	lctx := context.WithValue(context.TODO(), utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
 	for _, c := range pkg.BIPConfigs {
 		if ncfgs, err := pkg.ParseNodeConfigs(&c); err != nil {
 			setupLog.Error(err, "unable to parse nodes config for net setup")
@@ -225,7 +206,7 @@ func applyNodeConfigsAtStart() {
 				To:         &ncfgs,
 				StatusFunc: func() {},
 				Partition:  "Common",
-				Context:    context.WithValue(context.TODO(), pkg.CtxKey_SpecifiedBIGIP, url),
+				Context:    context.WithValue(lctx, pkg.CtxKey_SpecifiedBIGIP, url),
 			}
 		}
 	}
@@ -261,7 +242,15 @@ func setupReconcilers(mgr manager.Manager) {
 	}
 }
 
-func setupBIGIPs() error {
+func setupBIGIPs(credsDir, confDir string) error {
+	// TODO: the filenames must be 'bigip-kubernetes-gateway-config' and 'password'
+	if err := getCredentials(&pkg.BIPPassword, credsDir); err != nil {
+		return err
+	}
+	if err := getConfigs(&pkg.BIPConfigs, confDir); err != nil {
+		return err
+	}
+
 	errs := []string{}
 	for i, c := range pkg.BIPConfigs {
 		if c.Management == nil {

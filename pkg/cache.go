@@ -3,6 +3,7 @@ package pkg
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"sync"
 	"time"
@@ -421,9 +422,13 @@ func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayv1beta1.Gateway
 	return rlt
 }
 
-func (c *SIGCache) syncCoreV1Resources(kubeClient kubernetes.Interface) error {
+func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 	defer utils.TimeItToPrometheus()()
 	slog := utils.LogFromContext(context.TODO())
+	kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("unable to create kubeclient: %s", err.Error())
+	}
 
 	if epsList, err := kubeClient.CoreV1().Endpoints(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
 		return err
@@ -476,10 +481,10 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	}
 
 	if err := checkAndWaitCacheStarted(); err != nil {
-		panic(err)
+		return err
 	}
 
-	slog.Infof("starting to sync resources")
+	slog.Debugf("starting to sync resources")
 	var gwcList gatewayv1beta1.GatewayClassList
 	var gtwList gatewayv1beta1.GatewayList
 	var hrList gatewayv1beta1.HTTPRouteList
@@ -489,10 +494,11 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	} else {
 		for _, gwc := range gwcList.Items {
 			if gwc.Spec.ControllerName == gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
-				slog.Infof("found gatewayclass %s", gwc.Name)
+				slog.Debugf("found gatewayclass %s", gwc.Name)
 				c.GatewayClasses[gwc.Name] = gwc.DeepCopy()
 			} else {
-				slog.Infof("This gwc's ControllerName %s not equal to this controller. Ignore.", gwc.Spec.ControllerName)
+				msg := fmt.Sprintf("This gwc's ControllerName %s not equal to this controller. Ignore.", gwc.Spec.ControllerName)
+				slog.Debugf(msg)
 			}
 		}
 	}
@@ -516,24 +522,21 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	return nil
 }
 
-func (c *SIGCache) SyncAllResources(mgr manager.Manager) error {
+func (c *SIGCache) SyncAllResources(mgr manager.Manager) {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig()); err != nil {
-		panic(fmt.Errorf("unable to create kubeclient: %s", err.Error()))
-	} else {
-		if err := c.syncCoreV1Resources(kubeClient); err != nil {
-			panic(fmt.Errorf("unable to sync k8s corev1 resources to local: %s", err.Error()))
-		}
+	slog := utils.LogFromContext(context.TODO())
+	if err := c.syncCoreV1Resources(mgr); err != nil {
+		slog.Errorf("unable to sync k8s corev1 resources to local: %s", err.Error())
+		os.Exit(1)
 	}
-
 	if err := c.syncGatewayResources(mgr); err != nil {
-		panic(err)
+		slog.Errorf("failed to sync gateway api resources to local: %s", err.Error())
 	}
 
+	slog.Infof("Finished syncing resources to local")
 	c.SyncedAtStart = true
-	return nil
 }
