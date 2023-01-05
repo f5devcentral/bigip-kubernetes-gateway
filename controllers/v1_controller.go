@@ -60,8 +60,10 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	var obj v1.Namespace
-	zlog := log.FromContext(ctx)
-	zlog.V(1).Info("Namespace event: " + req.Name)
+
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	slog := utils.LogFromContext(lctx)
+	slog.Debugf("Namespace event: " + req.Name)
 
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
@@ -71,7 +73,7 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, err
 		}
 	} else {
-		pkg.ActiveSIGs.SetNamespace(&obj)
+		pkg.ActiveSIGs.SetNamespace(obj.DeepCopy())
 		return ctrl.Result{}, nil
 	}
 }

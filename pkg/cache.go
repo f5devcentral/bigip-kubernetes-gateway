@@ -18,7 +18,6 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 )
 
 func init() {
@@ -31,8 +30,8 @@ func init() {
 		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
 		Endpoints:      map[string]*v1.Endpoints{},
 		Service:        map[string]*v1.Service{},
-		GatewayClasses: map[string]*gatewayv1beta1.GatewayClass{},
-		Namespaces:     map[string]*v1.Namespace{},
+		GatewayClass:   map[string]*gatewayv1beta1.GatewayClass{},
+		Namespace:      map[string]*v1.Namespace{},
 	}
 }
 
@@ -41,7 +40,7 @@ func (c *SIGCache) SetNamespace(obj *v1.Namespace) {
 	defer c.mutex.Unlock()
 
 	if obj != nil {
-		c.Namespaces[obj.Name] = obj
+		c.Namespace[obj.Name] = obj
 	}
 }
 
@@ -49,7 +48,7 @@ func (c *SIGCache) UnsetNamespace(keyname string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	delete(c.Namespaces, keyname)
+	delete(c.Namespace, keyname)
 }
 
 func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
@@ -57,7 +56,7 @@ func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
 	defer c.mutex.Unlock()
 
 	if obj != nil {
-		c.GatewayClasses[obj.Name] = obj
+		c.GatewayClass[obj.Name] = obj
 	}
 }
 
@@ -65,14 +64,14 @@ func (c *SIGCache) UnsetGatewayClass(keyname string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	delete(c.GatewayClasses, keyname)
+	delete(c.GatewayClass, keyname)
 }
 
 func (c *SIGCache) GetGatewayClass(keyname string) *gatewayv1beta1.GatewayClass {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	return c.GatewayClasses[keyname]
+	return c.GatewayClass[keyname]
 }
 
 func (c *SIGCache) SetGateway(obj *gatewayv1beta1.Gateway) {
@@ -247,11 +246,12 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 			}
 			if utils.Keyname(ns, string(pr.Name)) == utils.Keyname(gw.Namespace, gw.Name) {
 				vsname := hrParentName(hr, &pr)
-				if _, ok := allowedRoutes[vsname]; ok {
-					allowed := allowedRoutes[vsname]
-					matched := namespaceMatches(gw.Namespace, allowed.Namespaces, hr.Namespace)
-					if matched {
-						hrs = append(hrs, hr)
+				if allowed, ok := allowedRoutes[vsname]; ok {
+					if routeNs, ok := ActiveSIGs.Namespace[hr.Namespace]; ok {
+						matched := namespaceMatches(gw.Namespace, allowed.Namespaces, routeNs)
+						if matched {
+							hrs = append(hrs, hr)
+						}
 					}
 				}
 			}
@@ -308,7 +308,7 @@ func (c *SIGCache) AllAttachedServiceKeys() []string {
 	defer c.mutex.RUnlock()
 
 	svcs := []string{}
-	for _, gwc := range c.GatewayClasses {
+	for _, gwc := range c.GatewayClass {
 		for _, gw := range c._attachedGateways(gwc) {
 			for _, hr := range c._attachedHTTPRoutes(gw) {
 				svcs = append(svcs, c._attachedServiceKeys(hr)...)
@@ -487,7 +487,7 @@ func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 	} else {
 		for _, ns := range nsList.Items {
 			slog.Debugf("found ns: %s", ns.Name)
-			c.Namespaces[ns.Name] = ns.DeepCopy()
+			c.Namespace[ns.Name] = ns.DeepCopy()
 		}
 	}
 
@@ -540,7 +540,7 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 		for _, gwc := range gwcList.Items {
 			if gwc.Spec.ControllerName == gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
 				slog.Debugf("found gatewayclass %s", gwc.Name)
-				c.GatewayClasses[gwc.Name] = gwc.DeepCopy()
+				c.GatewayClass[gwc.Name] = gwc.DeepCopy()
 			} else {
 				msg := fmt.Sprintf("This gwc's ControllerName %s not equal to this controller. Ignore.", gwc.Spec.ControllerName)
 				slog.Debugf(msg)
@@ -584,25 +584,4 @@ func (c *SIGCache) SyncAllResources(mgr manager.Manager) {
 
 	slog.Infof("Finished syncing resources to local")
 	c.SyncedAtStart = true
-}
-
-func namespaceMatches(gwNamespace string, namespaces *gatewayv1beta1.RouteNamespaces, routeNamespace string) bool {
-	selector, _ := metav1.LabelSelectorAsSelector(namespaces.Selector)
-
-	if namespaces == nil || namespaces.From == nil {
-		return true
-	}
-
-	switch *namespaces.From {
-	case gatewayv1beta1.NamespacesFromAll:
-		return true
-	case gatewayv1beta1.NamespacesFromSame:
-		return gwNamespace == routeNamespace
-	case gatewayv1beta1.NamespacesFromSelector:
-		if routeNs := ActiveSIGs.Namespaces[routeNamespace]; routeNs != nil {
-			return selector.Matches(labels.Set(routeNs.Labels))
-		}
-	}
-
-	return true
 }
