@@ -30,8 +30,25 @@ func init() {
 		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
 		Endpoints:      map[string]*v1.Endpoints{},
 		Service:        map[string]*v1.Service{},
-		GatewayClasses: map[string]*gatewayv1beta1.GatewayClass{},
+		GatewayClass:   map[string]*gatewayv1beta1.GatewayClass{},
+		Namespace:      map[string]*v1.Namespace{},
 	}
+}
+
+func (c *SIGCache) SetNamespace(obj *v1.Namespace) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if obj != nil {
+		c.Namespace[obj.Name] = obj
+	}
+}
+
+func (c *SIGCache) UnsetNamespace(keyname string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	delete(c.Namespace, keyname)
 }
 
 func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
@@ -39,7 +56,7 @@ func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
 	defer c.mutex.Unlock()
 
 	if obj != nil {
-		c.GatewayClasses[obj.Name] = obj
+		c.GatewayClass[obj.Name] = obj
 	}
 }
 
@@ -47,14 +64,14 @@ func (c *SIGCache) UnsetGatewayClass(keyname string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	delete(c.GatewayClasses, keyname)
+	delete(c.GatewayClass, keyname)
 }
 
 func (c *SIGCache) GetGatewayClass(keyname string) *gatewayv1beta1.GatewayClass {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	return c.GatewayClasses[keyname]
+	return c.GatewayClass[keyname]
 }
 
 func (c *SIGCache) SetGateway(obj *gatewayv1beta1.Gateway) {
@@ -211,6 +228,15 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 		return []*gatewayv1beta1.HTTPRoute{}
 	}
 
+	allowedRoutes := map[string]*gatewayv1beta1.AllowedRoutes{}
+	for _, listener := range gw.Spec.Listeners {
+		vsname := gwListenerName(gw, &listener)
+
+		if listener.AllowedRoutes != nil {
+			allowedRoutes[vsname] = listener.AllowedRoutes
+		}
+	}
+
 	hrs := []*gatewayv1beta1.HTTPRoute{}
 	for _, hr := range ActiveSIGs.HTTPRoute {
 		for _, pr := range hr.Spec.ParentRefs {
@@ -219,7 +245,15 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 				ns = string(*pr.Namespace)
 			}
 			if utils.Keyname(ns, string(pr.Name)) == utils.Keyname(gw.Namespace, gw.Name) {
-				hrs = append(hrs, hr)
+				vsname := hrParentName(hr, &pr)
+				if allowed, ok := allowedRoutes[vsname]; ok {
+					if routeNs, ok := ActiveSIGs.Namespace[hr.Namespace]; ok {
+						matched := namespaceMatches(gw.Namespace, allowed.Namespaces, routeNs)
+						if matched {
+							hrs = append(hrs, hr)
+						}
+					}
+				}
 			}
 		}
 	}
@@ -274,7 +308,7 @@ func (c *SIGCache) AllAttachedServiceKeys() []string {
 	defer c.mutex.RUnlock()
 
 	svcs := []string{}
-	for _, gwc := range c.GatewayClasses {
+	for _, gwc := range c.GatewayClass {
 		for _, gw := range c._attachedGateways(gwc) {
 			for _, hr := range c._attachedHTTPRoutes(gw) {
 				svcs = append(svcs, c._attachedServiceKeys(hr)...)
@@ -438,6 +472,7 @@ func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 			c.Endpoints[utils.Keyname(eps.Namespace, eps.Name)] = eps.DeepCopy()
 		}
 	}
+
 	if svcList, err := kubeClient.CoreV1().Services(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
 		return err
 	} else {
@@ -446,6 +481,16 @@ func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 			c.Service[utils.Keyname(svc.Namespace, svc.Name)] = svc.DeepCopy()
 		}
 	}
+
+	if nsList, err := kubeClient.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{}); err != nil {
+		return nil
+	} else {
+		for _, ns := range nsList.Items {
+			slog.Debugf("found ns: %s", ns.Name)
+			c.Namespace[ns.Name] = ns.DeepCopy()
+		}
+	}
+
 	if nList, err := kubeClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{}); err != nil {
 		return err
 	} else {
@@ -495,7 +540,7 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 		for _, gwc := range gwcList.Items {
 			if gwc.Spec.ControllerName == gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
 				slog.Debugf("found gatewayclass %s", gwc.Name)
-				c.GatewayClasses[gwc.Name] = gwc.DeepCopy()
+				c.GatewayClass[gwc.Name] = gwc.DeepCopy()
 			} else {
 				msg := fmt.Sprintf("This gwc's ControllerName %s not equal to this controller. Ignore.", gwc.Spec.ControllerName)
 				slog.Debugf(msg)
