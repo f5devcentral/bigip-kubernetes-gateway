@@ -48,6 +48,36 @@ type NodeReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+type NamespaceReconciler struct {
+	client.Client
+	Scheme *runtime.Scheme
+}
+
+func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	if !pkg.ActiveSIGs.SyncedAtStart {
+		<-time.After(100 * time.Millisecond)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	var obj v1.Namespace
+
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	slog := utils.LogFromContext(lctx)
+	slog.Debugf("Namespace event: " + req.Name)
+
+	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			pkg.ActiveSIGs.UnsetNamespace(req.Name)
+			return ctrl.Result{}, nil
+		} else {
+			return ctrl.Result{}, err
+		}
+	} else {
+		pkg.ActiveSIGs.SetNamespace(obj.DeepCopy())
+		return ctrl.Result{}, nil
+	}
+}
+
 func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
 	var obj v1.Endpoints
@@ -149,18 +179,20 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 // SetupReconcilerForCoreV1WithManager sets up the v1 controllers with the Manager.
 func SetupReconcilerForCoreV1WithManager(mgr ctrl.Manager) error {
-	rEps, rSvc, rNode :=
+	rEps, rSvc, rNode, rNs :=
 		&EndpointsReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
 		&ServiceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
-		&NodeReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
+		&NodeReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
+		&NamespaceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
 
-	err1, err2, err3 :=
+	err1, err2, err3, err4 :=
 		ctrl.NewControllerManagedBy(mgr).For(&v1.Endpoints{}).Complete(rEps),
 		ctrl.NewControllerManagedBy(mgr).For(&v1.Service{}).Complete(rSvc),
-		ctrl.NewControllerManagedBy(mgr).For(&v1.Node{}).Complete(rNode)
+		ctrl.NewControllerManagedBy(mgr).For(&v1.Node{}).Complete(rNode),
+		ctrl.NewControllerManagedBy(mgr).For(&v1.Namespace{}).Complete(rNs)
 
 	errmsg := ""
-	for _, err := range []error{err1, err2, err3} {
+	for _, err := range []error{err1, err2, err3, err4} {
 		if err != nil {
 			errmsg += err.Error() + ";"
 		}
