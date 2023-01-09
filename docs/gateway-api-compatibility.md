@@ -57,7 +57,7 @@ Fields:
 		* `protocol` - partially supported. Allowed values: `HTTP`.
 		* `tls` - not supported.
 		  * `options` - not supported.
-		* `allowedRoutes` - not supported. 
+		* `allowedRoutes` - supported. 
 	* `addresses` - partially upported.
 	    * type `IPAddress`: supported.
 		* type `Hostname`: will not support.
