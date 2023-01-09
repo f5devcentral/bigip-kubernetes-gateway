@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
@@ -103,9 +104,6 @@ func parseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute) (map[string]
 	}
 
 	rlt := map[string]interface{}{}
-	// if err := parsePoolsFrom(hr, rlt); err != nil {
-	// 	return map[string]interface{}{}, err
-	// }
 
 	if err := parseiRulesFrom(className, hr, rlt); err != nil {
 		return map[string]interface{}{}, err
@@ -123,10 +121,12 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 
 	rlt := map[string]interface{}{}
 	irules := map[string][]string{}
+	listeners := map[string]*gatewayv1beta1.Listener{}
 
-	for _, listener := range gw.Spec.Listeners {
+	for i, listener := range gw.Spec.Listeners {
+		vsname := gwListenerName(gw, &listener)
+		listeners[vsname] = &gw.Spec.Listeners[i]
 		if listener.Hostname != nil {
-			vsname := gwListenerName(gw, &listener)
 			if _, ok := irules[vsname]; !ok {
 				irules[vsname] = []string{}
 			}
@@ -148,7 +148,10 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	hrs := ActiveSIGs.AttachedHTTPRoutes(gw)
 	for _, hr := range hrs {
 		for _, pr := range hr.Spec.ParentRefs {
-
+			ns := hr.Namespace
+			if pr.Namespace != nil {
+				ns = string(*pr.Namespace)
+			}
 			if pr.SectionName == nil {
 				return map[string]interface{}{}, fmt.Errorf("sectionName of paraentRefs is nil, not supported")
 			}
@@ -156,7 +159,10 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 			if _, ok := irules[vsname]; !ok {
 				irules[vsname] = []string{}
 			}
-			irules[vsname] = append(irules[vsname], hrName(hr))
+			routetype := reflect.TypeOf(*hr).Name()
+			if routeMatches(ns, listeners[vsname], ActiveSIGs.GetNamespace(hr.Namespace), routetype) {
+				irules[vsname] = append(irules[vsname], hrName(hr))
+			}
 		}
 	}
 	for _, addr := range gw.Spec.Addresses {
