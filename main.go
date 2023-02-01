@@ -159,7 +159,7 @@ func getCredentials(bigipPassword *string, credsDir string) error {
 		if b, err := io.ReadAll(f); err != nil {
 			return err
 		} else {
-			*bigipPassword = string(b)
+			*bigipPassword = strings.TrimSpace(string(b))
 		}
 		return nil
 	}
