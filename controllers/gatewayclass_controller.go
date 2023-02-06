@@ -34,7 +34,8 @@ import (
 
 type GatewayClassReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	LogLevel string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -47,7 +48,7 @@ type GatewayClassReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
 	slog := utils.LogFromContext(lctx)
 	if req.Namespace != "" {
 		return ctrl.Result{}, fmt.Errorf("gateway class namespace must be ''")
