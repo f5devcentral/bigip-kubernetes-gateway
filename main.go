@@ -55,6 +55,7 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+	level    = utils.LogLevel_Type_INFO
 )
 
 func init() {
@@ -85,6 +86,7 @@ func main() {
 		"password file. To be used instead of bigip-password arguments.")
 	flag.StringVar(&confDir, "bigip-config-directory", "/bigip-config", "Directory of bigip-k8s-gw-conf.yaml file.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
+	flag.StringVar(&level, "log-level", utils.LogLevel_Type_INFO, "The log level, valid values: trace, debug, info, warn, error")
 
 	opts := zap.Options{
 		Development: true,
@@ -190,7 +192,7 @@ func applyNodeConfigsAtStart() {
 		}
 	}
 
-	lctx := context.WithValue(context.TODO(), utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	lctx := context.WithValue(context.TODO(), utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(level))
 	for _, c := range pkg.BIPConfigs {
 		if ncfgs, err := pkg.ParseNodeConfigs(&c); err != nil {
 			setupLog.Error(err, "unable to parse nodes config for net setup")
@@ -214,29 +216,32 @@ func applyNodeConfigsAtStart() {
 
 func setupReconcilers(mgr manager.Manager) {
 	if err := (&controllers.GatewayClassReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		LogLevel: level,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GatewayClass")
 		os.Exit(1)
 	}
 
 	if err := (&controllers.GatewayReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		LogLevel: level,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
 		os.Exit(1)
 	}
 	if err := (&controllers.HttpRouteReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		LogLevel: level,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HttpRoute")
 		os.Exit(1)
 	}
 
-	if err := controllers.SetupReconcilerForCoreV1WithManager(mgr); err != nil {
+	if err := controllers.SetupReconcilerForCoreV1WithManager(mgr, level); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Endpoints")
 		os.Exit(1)
 	}
@@ -263,7 +268,7 @@ func setupBIGIPs(credsDir, confDir string) error {
 		}
 		url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
 		username := c.Management.Username
-		bigip := f5_bigip.Initialize(url, username, pkg.BIPPassword, "debug")
+		bigip := f5_bigip.Initialize(url, username, pkg.BIPPassword, level)
 		pkg.BIGIPs = append(pkg.BIGIPs, bigip)
 
 		bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: context.TODO()}
@@ -284,7 +289,7 @@ func setupBIGIPs(credsDir, confDir string) error {
 					errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
 					continue
 				}
-				if err := bc.CreateVxlanTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName); err != nil {
+				if err := bc.CreateTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName); err != nil {
 					errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
 					continue
 				}

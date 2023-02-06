@@ -35,22 +35,26 @@ import (
 
 type EndpointsReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	LogLevel string
 }
 
 type ServiceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	LogLevel string
 }
 
 type NodeReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	LogLevel string
 }
 
 type NamespaceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	LogLevel string
 }
 
 func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -61,7 +65,7 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	var obj v1.Namespace
 
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
 	slog := utils.LogFromContext(lctx)
 	slog.Debugf("Namespace event: " + req.Name)
 
@@ -79,7 +83,7 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
 	var obj v1.Endpoints
 	// // too many logs.
 	// slog.Debugf("endpoint event: " + req.NamespacedName.String())
@@ -98,7 +102,7 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var obj v1.Service
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
 	slog := utils.LogFromContext(lctx)
 	slog.Debugf("Service event: " + req.NamespacedName.String())
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
@@ -115,7 +119,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog(uuid.New().String(), "debug"))
+	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)
 		return ctrl.Result{Requeue: true}, nil
@@ -178,12 +182,12 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 }
 
 // SetupReconcilerForCoreV1WithManager sets up the v1 controllers with the Manager.
-func SetupReconcilerForCoreV1WithManager(mgr ctrl.Manager) error {
+func SetupReconcilerForCoreV1WithManager(mgr ctrl.Manager, loglevel string) error {
 	rEps, rSvc, rNode, rNs :=
-		&EndpointsReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
-		&ServiceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
-		&NodeReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
-		&NamespaceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
+		&EndpointsReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), LogLevel: loglevel},
+		&ServiceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), LogLevel: loglevel},
+		&NodeReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), LogLevel: loglevel},
+		&NamespaceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), LogLevel: loglevel}
 
 	err1, err2, err3, err4 :=
 		ctrl.NewControllerManagedBy(mgr).For(&v1.Endpoints{}).Complete(rEps),

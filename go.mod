@@ -3,7 +3,7 @@ module gitee.com/zongzw/bigip-kubernetes-gateway
 go 1.19
 
 require (
-	gitee.com/zongzw/f5-bigip-rest v0.0.0-20221209030549-4a6915034940
+	gitee.com/zongzw/f5-bigip-rest v0.0.0-20230206042033-3ebe5fb7e08f
 	github.com/google/uuid v1.3.0
 	github.com/onsi/ginkgo/v2 v2.3.1
 	github.com/onsi/gomega v1.22.1
