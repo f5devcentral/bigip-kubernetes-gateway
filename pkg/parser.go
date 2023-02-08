@@ -301,11 +301,14 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 		hostnameCondition = "1 eq 1"
 	}
 
-	rules := []string{}
+	respRules := ""
+	reqRules := []string{}
 	ruleInits := []string{}
 	for i, rl := range hr.Spec.Rules {
 		ruleConditions := []string{}
-		filterActions := []string{}
+		//filterActions := []string{}
+		reqFilterActions := []string{}
+		respFilterActions := []string{}
 		poolWeights := []string{}
 
 		// matches
@@ -369,15 +372,16 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 			case gatewayv1beta1.HTTPRouteFilterRequestHeaderModifier:
 				if filter.RequestHeaderModifier != nil {
 					for _, mdr := range filter.RequestHeaderModifier.Add {
-						filterActions = append(filterActions, fmt.Sprintf("HTTP::header insert %s %s", mdr.Name, mdr.Value))
+						reqFilterActions = append(reqFilterActions, fmt.Sprintf("HTTP::header insert %s %s", mdr.Name, mdr.Value))
 					}
 					for _, mdr := range filter.RequestHeaderModifier.Remove {
-						filterActions = append(filterActions, fmt.Sprintf("HTTP::header remove %s", mdr))
+						reqFilterActions = append(reqFilterActions, fmt.Sprintf("HTTP::header remove %s", mdr))
 					}
 					for _, mdr := range filter.RequestHeaderModifier.Set {
-						filterActions = append(filterActions, fmt.Sprintf("HTTP::header replace %s %s", mdr.Name, mdr.Value))
+						reqFilterActions = append(reqFilterActions, fmt.Sprintf("HTTP::header replace %s %s", mdr.Name, mdr.Value))
 					}
 				}
+
 			case gatewayv1beta1.HTTPRouteFilterRequestMirror:
 				// filter.RequestMirror.BackendRef -> vs mirror?
 				return fmt.Errorf("filter type '%s' not supported", gatewayv1beta1.HTTPRouteFilterRequestMirror)
@@ -408,7 +412,7 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 							return fmt.Errorf("invalid status %d for request redirect", *rr.StatusCode)
 						}
 					}
-					filterActions = append(filterActions, fmt.Sprintf(`
+					reqFilterActions = append(reqFilterActions, fmt.Sprintf(`
 						%s
 						%s
 						%s
@@ -440,11 +444,23 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 			case gatewayv1beta1.HTTPRouteFilterExtensionRef:
 				if er := filter.ExtensionRef; er != nil {
 					pool := fmt.Sprintf("%s.%s", hr.Namespace, er.Name)
-					filterActions = append(filterActions, fmt.Sprintf("pool /%s/%s", "cis-c-tenant", pool))
+					reqFilterActions = append(reqFilterActions, fmt.Sprintf("pool /%s/%s", "cis-c-tenant", pool))
+				}
+			case gatewayv1beta1.HTTPRouteFilterResponseHeaderModifier:
+				if filter.ResponseHeaderModifier != nil {
+					for _, mdr := range filter.ResponseHeaderModifier.Add {
+						respFilterActions = append(respFilterActions, fmt.Sprintf("HTTP::header insert %s %s", mdr.Name, mdr.Value))
+					}
+					for _, mdr := range filter.ResponseHeaderModifier.Remove {
+						respFilterActions = append(respFilterActions, fmt.Sprintf("HTTP::header remove %s", mdr))
+					}
+					for _, mdr := range filter.ResponseHeaderModifier.Set {
+						respFilterActions = append(respFilterActions, fmt.Sprintf("HTTP::header replace %s %s", mdr.Name, mdr.Value))
+					}
 				}
 			}
 		}
-		filterAction := strings.Join(filterActions, "\n")
+		reqFilterAction := strings.Join(reqFilterActions, "\n")
 
 		for _, br := range rl.BackendRefs {
 			ns := hr.Namespace
@@ -478,38 +494,47 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 			set static::pools_%s_size [array size static::pools_%s]
 		`, namedi, strings.Join(poolWeights, " "), namedi, namedi, namedi)
 
-		rules = append(rules, fmt.Sprintf(`	
+		reqRules = append(reqRules, fmt.Sprintf(`	
 			if { %s } {
 				%s
 				%s
 			}
-		`, ruleCondition, filterAction, fmt.Sprintf(`
+		`, ruleCondition, reqFilterAction, fmt.Sprintf(`
 			set pool $static::pools_%s([expr {int(rand()*$static::pools_%s_size)}])
 			pool $pool
 			return
 		`, namedi, namedi)))
+
+		respRules = strings.Join(respFilterActions, "\n")
 
 		ruleInits = append(ruleInits, ruleInit)
 	}
 
 	ruleObj := map[string]interface{}{
 		"name": name,
-		"apiAnonymous": fmt.Sprintf(`
-		when RULE_INIT {
-			%s
-		}
-		when HTTP_REQUEST {
-			log local0. "request host: [HTTP::host], uri: [HTTP::uri], path: [HTTP::path], method: [HTTP::method]"
-			log local0. "headers: [HTTP::header names]"
-			foreach header [HTTP::header names] {
-				log local0. "$header: [HTTP::header value $header]"
-			}
-			log local0. "queryparams: [HTTP::query]"
-			if { %s } {
+		"apiAnonymous": fmt.Sprintf(
+			`
+			when RULE_INIT {
 				%s
 			}
-		}
-	`, strings.Join(ruleInits, "\n"), hostnameCondition, strings.Join(rules, "\n")),
+			when HTTP_REQUEST {
+				log local0. "request host: [HTTP::host], uri: [HTTP::uri], path: [HTTP::path], method: [HTTP::method]"
+				log local0. "headers: [HTTP::header names]"
+				foreach header [HTTP::header names] {
+					log local0. "$header: [HTTP::header value $header]"
+				}
+				log local0. "queryparams: [HTTP::query]"
+				if { %s } {
+					%s
+				}
+			}
+			when HTTP_RESPONSE {
+				%s
+			}
+			`,
+			strings.Join(ruleInits, "\n"),
+			hostnameCondition, strings.Join(reqRules, "\n"),
+			respRules),
 	}
 
 	rlt["ltm/rule/"+name] = ruleObj
