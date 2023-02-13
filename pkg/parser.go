@@ -518,12 +518,12 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 				%s
 			}
 			when HTTP_REQUEST {
-				log local0. "request host: [HTTP::host], uri: [HTTP::uri], path: [HTTP::path], method: [HTTP::method]"
-				log local0. "headers: [HTTP::header names]"
-				foreach header [HTTP::header names] {
-					log local0. "$header: [HTTP::header value $header]"
-				}
-				log local0. "queryparams: [HTTP::query]"
+				# log local0. "request host: [HTTP::host], uri: [HTTP::uri], path: [HTTP::path], method: [HTTP::method]"
+				# log local0. "headers: [HTTP::header names]"
+				# foreach header [HTTP::header names] {
+				#	 log local0. "$header: [HTTP::header value $header]"
+				# }
+				# log local0. "queryparams: [HTTP::query]"
 				if { %s } {
 					%s
 				}
