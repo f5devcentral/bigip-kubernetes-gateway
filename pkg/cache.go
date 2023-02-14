@@ -32,7 +32,9 @@ func init() {
 		Service:        map[string]*v1.Service{},
 		GatewayClass:   map[string]*gatewayv1beta1.GatewayClass{},
 		Namespace:      map[string]*v1.Namespace{},
+		ReferenceGrant: map[string]*gatewayv1beta1.ReferenceGrant{},
 	}
+	refFromTo = &ReferenceGrantFromTo{}
 }
 
 func (c *SIGCache) SetNamespace(obj *v1.Namespace) {
@@ -171,6 +173,34 @@ func (c *SIGCache) UnsetService(keyname string) {
 	delete(c.Service, keyname)
 }
 
+func (c *SIGCache) SetReferenceGrant(rg *gatewayv1beta1.ReferenceGrant) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c._setReferenceGrant(rg)
+}
+
+func (c *SIGCache) _setReferenceGrant(rg *gatewayv1beta1.ReferenceGrant) {
+	if rg != nil {
+		keyname := utils.Keyname(rg.Namespace, rg.Name)
+		if org, ok := c.ReferenceGrant[keyname]; ok {
+			refFromTo.unset(org)
+		}
+		c.ReferenceGrant[keyname] = rg
+		refFromTo.set(rg)
+	}
+}
+
+func (c *SIGCache) UnsetReferenceGrant(keyname string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	rg := c.ReferenceGrant[keyname]
+	if rg != nil {
+		refFromTo.unset(rg)
+		delete(c.ReferenceGrant, keyname)
+	}
+}
+
 func (c *SIGCache) AttachedGateways(gtw *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
@@ -296,7 +326,7 @@ func (c *SIGCache) _attachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service
 			if br.Namespace != nil {
 				ns = string(*br.Namespace)
 			}
-			if svc, ok := c.Service[utils.Keyname(ns, string(br.Name))]; ok {
+			if svc, ok := c.Service[utils.Keyname(ns, string(br.Name))]; ok && c._canRefer(hr, svc) {
 				svcs = append(svcs, svc)
 			}
 		}
@@ -306,7 +336,7 @@ func (c *SIGCache) _attachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service
 			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
 				er := fl.ExtensionRef
 				if er.Group == "" && er.Kind == "Service" {
-					if svc, ok := c.Service[utils.Keyname(hr.Namespace, string(er.Name))]; ok {
+					if svc, ok := c.Service[utils.Keyname(hr.Namespace, string(er.Name))]; ok && c._canRefer(hr, svc) {
 						svcs = append(svcs, svc)
 					}
 				}
@@ -322,44 +352,20 @@ func (c *SIGCache) AllAttachedServiceKeys() []string {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	svcs := []string{}
+	svcs := []*v1.Service{}
 	for _, gwc := range c.GatewayClass {
 		for _, gw := range c._attachedGateways(gwc) {
 			for _, hr := range c._attachedHTTPRoutes(gw) {
-				svcs = append(svcs, c._attachedServiceKeys(hr)...)
-			}
-		}
-	}
-	return svcs
-}
-
-func (c *SIGCache) _attachedServiceKeys(hr *gatewayv1beta1.HTTPRoute) []string {
-	if hr == nil {
-		return []string{}
-	}
-
-	svcs := []string{}
-	for _, rl := range hr.Spec.Rules {
-		for _, br := range rl.BackendRefs {
-			ns := hr.Namespace
-			if br.Namespace != nil {
-				ns = string(*br.Namespace)
-			}
-			svcs = append(svcs, utils.Keyname(ns, string(br.Name)))
-		}
-	}
-	for _, rl := range hr.Spec.Rules {
-		for _, fl := range rl.Filters {
-			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
-				er := fl.ExtensionRef
-				if er.Group == "" && er.Kind == "Service" {
-					svcs = append(svcs, utils.Keyname(hr.Namespace, string(er.Name)))
-				}
+				svcs = append(svcs, c._attachedServices(hr)...)
 			}
 		}
 	}
 
-	return utils.Unified(svcs)
+	rlt := []string{}
+	for _, svc := range svcs {
+		rlt = append(rlt, utils.Keyname(svc.Namespace, svc.Name))
+	}
+	return rlt
 }
 
 func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
@@ -471,6 +477,50 @@ func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayv1beta1.Gateway
 	return rlt
 }
 
+// CanRefer parameter "from" and "to" MUST NOT be nil.
+func (c *SIGCache) CanRefer(from, to client.Object) bool {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c._canRefer(from, to)
+}
+
+func (c *SIGCache) _canRefer(from, to client.Object) bool {
+	fromns := client.Object.GetNamespace(from)
+	tons := client.Object.GetNamespace(to)
+	if fromns == tons {
+		return true
+	}
+
+	fromgvk := client.Object.GetObjectKind(from).GroupVersionKind()
+	if fromgvk.Group != gatewayv1beta1.GroupName {
+		return false
+	}
+	rgf := gatewayv1beta1.ReferenceGrantFrom{
+		Group:     gatewayv1beta1.Group(fromgvk.Group),
+		Kind:      gatewayv1beta1.Kind(fromgvk.Kind),
+		Namespace: gatewayv1beta1.Namespace(fromns),
+	}
+	f := stringifyRGFrom(&rgf)
+
+	togvk := client.Object.GetObjectKind(to).GroupVersionKind()
+	toname := gatewayv1beta1.ObjectName(client.Object.GetName(to))
+	rgt := gatewayv1beta1.ReferenceGrantTo{
+		Group: gatewayv1beta1.Group(togvk.Group),
+		Kind:  gatewayv1beta1.Kind(togvk.Kind),
+		Name:  &toname,
+	}
+	t := stringifyRGTo(&rgt, tons)
+
+	rgtAll := gatewayv1beta1.ReferenceGrantTo{
+		Group: gatewayv1beta1.Group(togvk.Group),
+		Kind:  gatewayv1beta1.Kind(togvk.Kind),
+	}
+	toAll := stringifyRGTo(&rgtAll, tons)
+
+	return refFromTo.exists(f, t) || refFromTo.exists(f, toAll)
+}
+
 func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 	defer utils.TimeItToPrometheus()()
 	slog := utils.LogFromContext(context.TODO())
@@ -548,6 +598,7 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	var gwcList gatewayv1beta1.GatewayClassList
 	var gtwList gatewayv1beta1.GatewayList
 	var hrList gatewayv1beta1.HTTPRouteList
+	var rgList gatewayv1beta1.ReferenceGrantList
 
 	if err := mgr.GetCache().List(context.TODO(), &gwcList, &client.ListOptions{}); err != nil {
 		return err
@@ -571,12 +622,22 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 			c.Gateway[utils.Keyname(gw.Namespace, gw.Name)] = gw.DeepCopy()
 		}
 	}
+
 	if err := mgr.GetCache().List(context.TODO(), &hrList, &client.ListOptions{}); err != nil {
 		return err
 	} else {
 		for _, hr := range hrList.Items {
 			slog.Debugf("found httproute %s", utils.Keyname(hr.Namespace, hr.Name))
 			c.HTTPRoute[utils.Keyname(hr.Namespace, hr.Name)] = hr.DeepCopy()
+		}
+	}
+
+	if err := mgr.GetCache().List(context.TODO(), &rgList, &client.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, rg := range rgList.Items {
+			slog.Debugf("found referencegrant %s", utils.Keyname(rg.Namespace, rg.Name))
+			c._setReferenceGrant(rg.DeepCopy())
 		}
 	}
 	return nil
