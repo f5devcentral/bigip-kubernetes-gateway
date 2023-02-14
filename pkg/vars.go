@@ -8,6 +8,7 @@ var (
 	BIGIPs         []*f5_bigip.BIGIP
 	BIPConfigs     BIGIPConfigs
 	BIPPassword    string
+	refFromTo      *ReferenceGrantFromTo
 )
 
 const (
