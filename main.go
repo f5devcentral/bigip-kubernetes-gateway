@@ -240,6 +240,14 @@ func setupReconcilers(mgr manager.Manager) {
 		setupLog.Error(err, "unable to create controller", "controller", "HttpRoute")
 		os.Exit(1)
 	}
+	if err := (&controllers.ReferenceGrantReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		LogLevel: level,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ReferenceGrant")
+		os.Exit(1)
+	}
 
 	if err := controllers.SetupReconcilerForCoreV1WithManager(mgr, level); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Endpoints")

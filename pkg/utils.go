@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 
+	"gitee.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -88,4 +89,73 @@ func routeMatches(gwNamespace string, listener *gatewayv1beta1.Listener, routeNa
 	}
 
 	return matchedFrom && matchedKind
+}
+
+func stringifyRGFrom(rgf *gatewayv1beta1.ReferenceGrantFrom) string {
+	g := "-"
+	if rgf.Group != "" {
+		g = string(rgf.Group)
+	}
+	ns := "-"
+	if rgf.Namespace != "" {
+		ns = string(rgf.Namespace)
+	}
+	return utils.Keyname(g, string(rgf.Kind), ns)
+}
+
+func stringifyRGTo(rgt *gatewayv1beta1.ReferenceGrantTo, ns string) string {
+	g := "-"
+	if rgt.Group != "" {
+		g = string(rgt.Group)
+	}
+	n := "*"
+	if rgt.Name != nil {
+		n = string(*rgt.Name)
+	}
+	return utils.Keyname(g, string(rgt.Kind), ns, n)
+}
+
+func (rgft *ReferenceGrantFromTo) set(rg *gatewayv1beta1.ReferenceGrant) {
+	ns := rg.Namespace
+	for _, f := range rg.Spec.From {
+		from := stringifyRGFrom(&f)
+		if _, ok := (*rgft)[from]; !ok {
+			(*rgft)[from] = map[string]int8{}
+		}
+		for _, t := range rg.Spec.To {
+			to := stringifyRGTo(&t, ns)
+			(*rgft)[from][to] += 1
+		}
+	}
+}
+
+func (rgft *ReferenceGrantFromTo) unset(rg *gatewayv1beta1.ReferenceGrant) {
+	ns := rg.Namespace
+	for _, f := range rg.Spec.From {
+		from := stringifyRGFrom(&f)
+		if _, ok := (*rgft)[from]; !ok {
+			return
+		}
+		for _, t := range rg.Spec.To {
+			to := stringifyRGTo(&t, ns)
+			if _, ok := (*rgft)[from][to]; ok {
+				(*rgft)[from][to] -= 1
+				if (*rgft)[from][to] == 0 {
+					delete((*rgft)[from], to)
+				}
+			}
+		}
+	}
+}
+
+func (rgft *ReferenceGrantFromTo) exists(from, to string) bool {
+	if toes, ok := (*rgft)[from]; !ok {
+		return false
+	} else {
+		if v, ok := toes[to]; ok && v > 0 {
+			return true
+		} else {
+			return false
+		}
+	}
 }

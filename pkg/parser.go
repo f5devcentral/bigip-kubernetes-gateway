@@ -467,6 +467,10 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 			if br.Namespace != nil {
 				ns = string(*br.Namespace)
 			}
+			svc := ActiveSIGs.GetService(utils.Keyname(ns, string(br.Name)))
+			if svc == nil || !ActiveSIGs.CanRefer(hr, svc) {
+				continue
+			}
 			pn := strings.Join([]string{ns, string(br.Name)}, ".")
 			pool := fmt.Sprintf("/%s/%s", "cis-c-tenant", pn)
 			weight := 1
