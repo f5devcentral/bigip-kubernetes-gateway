@@ -5035,7 +5035,7 @@ spec:
       containers:
         - name: webhook
           image: gcr.io/k8s-staging-gateway-api/admission-server:v0.6.0
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           args:
             - -logtostderr
             - --tlsCertFile=/etc/certs/cert

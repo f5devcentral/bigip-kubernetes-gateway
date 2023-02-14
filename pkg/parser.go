@@ -418,7 +418,7 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 						%s
 						%s
 						set url $rscheme://$rhostname:$rport$ruri
-						log local0. "request redirect to $url"
+						# log local0. "request redirect to $url"
 						HTTP::respond %d Location $url
 					`, setScheme, setHostName, setUri, setPort, *rr.StatusCode))
 				}

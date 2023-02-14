@@ -9,6 +9,7 @@ var (
 	BIPConfigs     BIGIPConfigs
 	BIPPassword    string
 	refFromTo      *ReferenceGrantFromTo
+	LogLevel       string
 )
 
 const (

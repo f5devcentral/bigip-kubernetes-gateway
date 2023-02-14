@@ -99,6 +99,7 @@ func main() {
 		setupLog.Error(err, "failed to setup BIG-IPs")
 		os.Exit(1)
 	}
+	pkg.LogLevel = level
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -276,7 +277,7 @@ func setupBIGIPs(credsDir, confDir string) error {
 		}
 		url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
 		username := c.Management.Username
-		bigip := f5_bigip.Initialize(url, username, pkg.BIPPassword, level)
+		bigip := f5_bigip.New(url, username, pkg.BIPPassword)
 		pkg.BIGIPs = append(pkg.BIGIPs, bigip)
 
 		bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: context.TODO()}

@@ -84,12 +84,12 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// TODO:
 		// 1.671457016981118e+09	DEBUG	handling gatewayclass bigip	{"controller": "gatewayclass", "controllerGroup": "gateway.networking.k8s.io", "controllerKind": "GatewayClass", "GatewayClass": {"name":"bigip"}, "namespace": "", "name": "bigip", "reconcileID": "bcd01fdd-8dfc-4be9-b3ab-c3d3a3fdb67e"}
 		// 1.6714570170091689e+09	ERROR	unable to update status	{"controller": "gatewayclass", "controllerGroup": "gateway.networking.k8s.io", "controllerKind": "GatewayClass", "GatewayClass": {"name":"bigip"}, "namespace": "", "name": "bigip", "reconcileID": "bcd01fdd-8dfc-4be9-b3ab-c3d3a3fdb67e", "error": "Operation cannot be fulfilled on gatewayclasses.gateway.networking.k8s.io \"bigip\": the object has been modified; please apply your changes to the latest version and try again"}
-		if err := r.Status().Update(ctx, ngwc); err != nil {
-			slog.Errorf("unable to update status: %s", err.Error())
-			return ctrl.Result{}, err
-		} else {
-			slog.Debugf("status updated")
-		}
+		// if err := r.Status().Update(ctx, ngwc); err != nil {
+		// 	slog.Errorf("unable to update status: %s", err.Error())
+		// 	return ctrl.Result{}, err
+		// } else {
+		// 	slog.Debugf("status updated")
+		// }
 
 		// upsert gatewayclass
 		defer pkg.ActiveSIGs.SetGatewayClass(&obj)
