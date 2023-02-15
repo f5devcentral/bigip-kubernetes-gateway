@@ -18,9 +18,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -129,6 +131,7 @@ func main() {
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostCount)
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostTotal)
 	mgr.AddMetricsExtraHandler("/stats", promhttp.Handler())
+	mgr.AddMetricsExtraHandler("/runtime", dumpRuntimeHandler())
 
 	setupReconcilers(mgr)
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -321,5 +324,27 @@ func setupBIGIPs(credsDir, confDir string) error {
 		return fmt.Errorf(strings.Join(errs, "; "))
 	} else {
 		return nil
+	}
+}
+
+func dumpRuntimeHandler() http.HandlerFunc {
+	if level != utils.LogLevel_Type_DEBUG {
+		return func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(200)
+			fmt.Fprintf(w, `{"info": "To dump runtimes, please set the --log-level to debug"}`)
+		}
+	} else {
+		return func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("Content-Type", "application/json")
+			if rlt, err := pkg.ActiveSIGs.DumpsAllResources(); err != nil {
+				w.WriteHeader(400)
+				fmt.Fprintf(w, `{"error": "failed to dump runtime objects: %s"}`, err.Error())
+			} else {
+				w.WriteHeader(200)
+				d, _ := json.MarshalIndent(rlt, "", "  ")
+				fmt.Fprintf(w, "%s", string(d))
+			}
+		}
 	}
 }

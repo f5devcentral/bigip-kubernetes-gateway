@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
@@ -660,4 +661,102 @@ func (c *SIGCache) SyncAllResources(mgr manager.Manager) {
 
 	slog.Infof("Finished syncing resources to local")
 	c.SyncedAtStart = true
+}
+
+func (c *SIGCache) DumpsAllResources() (map[string]interface{}, error) {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	rlt := map[string]interface{}{}
+
+	dump := func(k string, v interface{}, rlt *map[string]interface{}) error {
+		if b, err := json.Marshal(v); err != nil {
+			return fmt.Errorf("failed to dump %s: %s", k, err.Error())
+		} else {
+			var d map[string]interface{}
+			if err := json.Unmarshal(b, &d); err != nil {
+				return fmt.Errorf("failed to unmarshal data from sigcache: %s", err)
+			} else {
+				(*rlt)[k] = d
+			}
+		}
+		return nil
+	}
+
+	// TODO: use reflect to deduplicate the following code.
+
+	// Namespace
+	namespaces := map[string]interface{}{}
+	for k, v := range c.Namespace {
+		if err := dump(k, v, &namespaces); err != nil {
+			return nil, err
+		}
+	}
+	rlt["Namespace"] = namespaces
+
+	// Endpoints
+	endpoints := map[string]interface{}{}
+	for k, v := range c.Endpoints {
+		if err := dump(k, v, &endpoints); err != nil {
+			return nil, err
+		}
+	}
+	rlt["Endpoints"] = endpoints
+
+	// Service
+	services := map[string]interface{}{}
+	for k, v := range c.Service {
+		if err := dump(k, v, &services); err != nil {
+			return nil, err
+		}
+	}
+	rlt["Service"] = services
+
+	// Gateway
+	gateways := map[string]interface{}{}
+	for k, v := range c.Gateway {
+		if err := dump(k, v, &gateways); err != nil {
+			return nil, err
+		}
+	}
+	rlt["Gateway"] = gateways
+
+	// GatewayClass
+	gatewayclasses := map[string]interface{}{}
+	for k, v := range c.GatewayClass {
+		if err := dump(k, v, &gatewayclasses); err != nil {
+			return nil, err
+		}
+	}
+	rlt["GatewayClass"] = gatewayclasses
+
+	// HTTPRoute
+	httproutes := map[string]interface{}{}
+	for k, v := range c.HTTPRoute {
+		if err := dump(k, v, &httproutes); err != nil {
+			return nil, err
+		}
+	}
+	rlt["HTTPRoute"] = httproutes
+
+	// ReferenceGrant
+	referencegrants := map[string]interface{}{}
+	for k, v := range c.ReferenceGrant {
+		if err := dump(k, v, &referencegrants); err != nil {
+			return nil, err
+		}
+	}
+	rlt["ReferenceGrant"] = referencegrants
+
+	// ControllerName
+	rlt["ControllerName"] = c.ControllerName
+
+	// refFromTo
+	if err := dump("refFromTo", refFromTo, &rlt); err != nil {
+		return nil, err
+	}
+
+	return rlt, nil
 }
