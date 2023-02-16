@@ -69,6 +69,7 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	slog := utils.LogFromContext(lctx)
 	slog.Debugf("Namespace event: " + req.Name)
 
+	// TODO: update resource mappings since namespace labels are changed.
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			pkg.ActiveSIGs.UnsetNamespace(req.Name)

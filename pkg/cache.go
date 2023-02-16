@@ -382,36 +382,43 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 		return []*gatewayv1beta1.HTTPRoute{}
 	}
 
-	refered := func(hr *gatewayv1beta1.HTTPRoute) bool {
-		for _, rl := range hr.Spec.Rules {
-			for _, br := range rl.BackendRefs {
-				ns := hr.Namespace
-				if br.Namespace != nil {
-					ns = string(*br.Namespace)
-				}
-				if utils.Keyname(ns, string(br.Name)) == utils.Keyname(svc.Namespace, svc.Name) {
-					return true
-				}
-			}
-		}
-		for _, rl := range hr.Spec.Rules {
-			for _, fl := range rl.Filters {
-				if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
-					er := fl.ExtensionRef
-					if er.Group == "" && er.Kind == "Service" {
-						if utils.Keyname(hr.Namespace, string(er.Name)) == utils.Keyname(svc.Namespace, svc.Name) {
-							return true
-						}
-					}
-				}
-			}
-		}
-		return false
-	}
+	// To performance perspective, it may be good.
+	// But the implementation is similiar to _attachedServices, would easily introduce issues.
+	// refered := func(hr *gatewayv1beta1.HTTPRoute) bool {
+	// 	for _, rl := range hr.Spec.Rules {
+	// 		for _, br := range rl.BackendRefs {
+	// 			ns := hr.Namespace
+	// 			if br.Namespace != nil {
+	// 				ns = string(*br.Namespace)
+	// 			}
+	// 			if utils.Keyname(ns, string(br.Name)) == utils.Keyname(svc.Namespace, svc.Name) {
+	// 				return true
+	// 			}
+	// 		}
+	// 	}
+	// 	for _, rl := range hr.Spec.Rules {
+	// 		for _, fl := range rl.Filters {
+	// 			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
+	// 				er := fl.ExtensionRef
+	// 				if er.Group == "" && er.Kind == "Service" {
+	// 					if utils.Keyname(hr.Namespace, string(er.Name)) == utils.Keyname(svc.Namespace, svc.Name) {
+	// 						return true
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// 	return false
+	// }
 
 	hrKeys := []string{}
 	for _, hr := range c.HTTPRoute {
-		if refered(hr) {
+		svcs := c._attachedServices(hr)
+		svcKeys := []string{}
+		for _, s := range svcs {
+			svcKeys = append(svcKeys, utils.Keyname(s.Namespace, s.Name))
+		}
+		if utils.Contains(svcKeys, utils.Keyname(svc.Namespace, svc.Name)) {
 			hrKeys = append(hrKeys, utils.Keyname(hr.Namespace, hr.Name))
 		}
 	}
@@ -523,7 +530,7 @@ func (c *SIGCache) _canRefer(from, to client.Object) bool {
 
 func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 	defer utils.TimeItToPrometheus()()
-	slog := utils.LogFromContext(context.TODO())
+	slog := utils.LogFromContext(context.TODO()).WithLevel(LogLevel)
 	kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return fmt.Errorf("unable to create kubeclient: %s", err.Error())
@@ -570,7 +577,7 @@ func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 
 func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	defer utils.TimeItToPrometheus()()
-	slog := utils.LogFromContext(context.TODO())
+	slog := utils.LogFromContext(context.TODO()).WithLevel(LogLevel)
 
 	checkAndWaitCacheStarted := func() error {
 		var gtwList gatewayv1beta1.GatewayList
