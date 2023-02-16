@@ -19,11 +19,6 @@ type DeployRequest struct {
 
 type CtxKeyType string
 
-type ParseRequest struct {
-	Gateway   *gatewayv1beta1.Gateway
-	HTTPRoute *gatewayv1beta1.HTTPRoute
-}
-
 type SIGCache struct {
 	mutex          sync.RWMutex
 	SyncedAtStart  bool
