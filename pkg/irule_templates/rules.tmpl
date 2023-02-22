@@ -1,0 +1,49 @@
+{{ define "InitPools" }}
+  {{/* Define httproute as variable hr */}}
+  {{ $hr := . }}
+
+  {{ range $RuleIndex, $Rule := .Spec.Rules }}
+      array unset weights *
+      array unset static::pools_{{ $RuleIndex }} *
+      set index 0
+
+      array set weights { {{ parsePoolweight $Rule.BackendRefs $hr }} }
+      foreach name [array names weights] {
+        for { set i 0 }  { $i < $weights($name) }  { incr i } {
+            set static::pools_{{ $RuleIndex }}($index) $name
+            incr index
+        }
+      }
+      set static::pools_{{ $RuleIndex }}_size [array size static::pools_{{ $RuleIndex }}]
+  {{ end }}
+
+{{ end }}
+
+{{ define "RequestRules" }}
+  {{/* Define httproute as variable hr */}}
+  {{ $hr := . }}
+
+  {{ range $RuleIndex, $Rule := .Spec.Rules }}
+    {{/*
+      Each Rule.Match has a default path prefix '/',
+      so here is no `else` condition.
+    */}}
+    if { {{ parseMatches $Rule.Matches }} } {
+      {{ parseReqFilters $Rule.Filters $hr }}
+
+      set pool $static::pools_{{ $RuleIndex }}([expr {int(rand()*$static::pools_{{ $RuleIndex }}_size)}])
+      pool $pool
+      return
+    }
+  {{ end }}
+
+{{ end }}
+
+{{ define "ResponseRules" }}
+  {{/* Define httproute as variable hr */}}
+  {{ $hr := . }}
+
+  {{ range $index, $Rule := .Spec.Rules }}
+    {{ parseRespFilters $Rule.Filters $hr }}
+  {{ end }}
+{{ end }}
