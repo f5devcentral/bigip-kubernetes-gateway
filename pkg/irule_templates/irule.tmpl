@@ -1,0 +1,17 @@
+when RULE_INIT {
+{{ template "InitPools" . }}
+}
+
+when HTTP_REQUEST {
+{{ if .Spec.Hostnames }}
+  if { {{ orHosts "[HTTP::host] matches" .Spec.Hostnames }} }{
+    {{ template "RequestRules" . }}
+  }
+{{ else }}
+  {{ template "RequestRules" . }}
+{{ end }}
+}
+
+when HTTP_RESPONSE {
+{{ template "ResponseRules" . }}
+}

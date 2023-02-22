@@ -9,6 +9,7 @@ This document describes which Gateway API resources BIG-IP Kubernetes Gateway su
 | [GatewayClass](#gatewayclass) | Partially supported |
 | [Gateway](#gateway) | Partially supported |
 | [HTTPRoute](#httproute) | Partially supported |
+| [ReferenceGrant](#referencegrant) | Support |
 | [TLSRoute](#tlsroute) | Not supported, experimental in v0.5.1 |
 | [TCPRoute](#tcproute) | Not supported, experimental in v0.5.1 |
 | [UDPRoute](#udproute) | Not supported, experimental in v0.5.1 |
@@ -93,6 +94,7 @@ Fields:
 		* `type` - supported.
 		* `requestRedirect` - supported. 
 		* `requestHeaderModifier` - supported.
+		* `responseHeaderModifier` - supported.
         * `requestMirror` - not supported.
         * `urlRewrite` - supported, experimental in v0.5.1.
         * `extensionRef` - partially supported, only v1.Service.
@@ -104,6 +106,10 @@ Fields:
 	* `parentRef` - not supported.
 	* `controllerName` - not supported.
 	* `conditions` - not supported.
+
+### ReferenceGrant
+
+> Status: Supported(since v0.2.0).
 
 ### TLSRoute
 
