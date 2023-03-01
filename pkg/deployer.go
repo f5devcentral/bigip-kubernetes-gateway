@@ -1,8 +1,6 @@
 package pkg
 
 import (
-	"fmt"
-
 	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
 )
@@ -65,35 +63,4 @@ func Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 			}
 		}
 	}
-}
-
-func EnableBGPRouting(bc *f5_bigip.BIGIPContext) error {
-	kind := "net/route-domain"
-	partition, subfolder, name := "Common", "", "0" // route domain 0
-
-	exists, err := bc.Exist(kind, name, partition, subfolder)
-	if err != nil {
-		return err
-	}
-	if exists == nil {
-		return fmt.Errorf("route domain 0 must exist. check it")
-	}
-	// "Cannot mix routing-protocol Legacy and TMOS mode for route-domain (/Common/0)."
-	// We need to remove "BGP" from routingProtocol for TMOS mode
-	if (*exists)["routingProtocol"] != nil {
-		nrps := []interface{}{}
-		for _, rp := range (*exists)["routingProtocol"].([]interface{}) {
-			if rp.(string) != "BGP" {
-				nrps = append(nrps, rp)
-			}
-		}
-		body := map[string]interface{}{
-			"routingProtocol": nrps,
-		}
-		if err := bc.Update(kind, name, partition, subfolder, body); err != nil {
-			return err
-		}
-	}
-
-	return bc.ModifyDbValue("tmrouted.tmos.routing", "enable")
 }

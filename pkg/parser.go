@@ -274,91 +274,14 @@ func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) er
 			return err
 		} else {
 			for _, mb := range mbs {
-				if mb.MacAddr != "" {
-					rlt["ltm/node/"+mb.IpAddr] = map[string]interface{}{
-						"name":    mb.IpAddr,
-						"address": mb.IpAddr,
-						"monitor": "default",
-						"session": "user-enabled",
-					}
+				rlt["ltm/node/"+mb.IpAddr] = map[string]interface{}{
+					"name":    mb.IpAddr,
+					"address": mb.IpAddr,
+					"monitor": "default",
+					"session": "user-enabled",
 				}
 			}
 		}
 	}
 	return nil
-}
-
-func parseNeighsFrom(routerName, localAs, remoteAs string, addresses []string) (map[string]interface{}, error) {
-	rlt := map[string]interface{}{}
-
-	name := strings.Join([]string{"Common", routerName}, ".")
-	rlt["net/routing/bgp/"+name] = map[string]interface{}{
-		"name":     name,
-		"localAs":  localAs,
-		"neighbor": []interface{}{},
-	}
-
-	fmtneigs := []interface{}{}
-	for _, address := range addresses {
-		fmtneigs = append(fmtneigs, map[string]interface{}{
-			"name":     address,
-			"remoteAs": remoteAs,
-		})
-	}
-
-	rlt["net/routing/bgp/"+name].(map[string]interface{})["neighbor"] = fmtneigs
-
-	return rlt, nil
-}
-
-func parseFdbsFrom(tunnelName string, iPToMac map[string]string) (map[string]interface{}, error) {
-	rlt := map[string]interface{}{}
-
-	rlt["net/fdb/tunnel/"+tunnelName] = map[string]interface{}{
-		"records": []interface{}{},
-	}
-
-	fmtrecords := []interface{}{}
-	for ip, mac := range iPToMac {
-		fmtrecords = append(fmtrecords, map[string]string{
-			"name":     mac,
-			"endpoint": ip,
-		})
-	}
-
-	rlt["net/fdb/tunnel/"+tunnelName].(map[string]interface{})["records"] = fmtrecords
-
-	return rlt, nil
-}
-
-func ParseNodeConfigs(bc *BIGIPConfig) (map[string]interface{}, error) {
-	cfgs := map[string]interface{}{}
-
-	if bc.Calico != nil {
-		nIpAddresses := k8s.NodeCache.AllIpAddresses()
-		if ccfgs, err := parseNeighsFrom("gwcBGP", bc.Calico.LocalAS, bc.Calico.RemoteAS, nIpAddresses); err != nil {
-			return map[string]interface{}{}, err
-		} else {
-			for k, v := range ccfgs {
-				cfgs[k] = v
-			}
-		}
-	}
-
-	if bc.Flannel != nil {
-		nIpToMacV4, _ := k8s.NodeCache.AllIpToMac()
-		for _, tunnel := range bc.Flannel.Tunnels {
-			if fcfgs, err := parseFdbsFrom(tunnel.Name, nIpToMacV4); err != nil {
-				return map[string]interface{}{}, err
-			} else {
-				for k, v := range fcfgs {
-					cfgs[k] = v
-				}
-			}
-		}
-	}
-
-	return map[string]interface{}{
-		"": cfgs,
-	}, nil
 }
