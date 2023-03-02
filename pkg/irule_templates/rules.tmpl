@@ -30,9 +30,10 @@
     */}}
     if { {{ parseMatches $Rule.Matches }} } {
       {{ parseReqFilters $Rule.Filters $hr }}
-
-      set pool $static::pools_{{ $RuleIndex }}([expr {int(rand()*$static::pools_{{ $RuleIndex }}_size)}])
-      pool $pool
+      if { $static::pools_{{ $RuleIndex }}_size != 0 }{
+        set pool $static::pools_{{ $RuleIndex }}([expr {int(rand()*$static::pools_{{ $RuleIndex }}_size)}])
+        pool $pool
+      }
       return
     }
   {{ end }}

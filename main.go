@@ -131,8 +131,8 @@ func main() {
 	prometheus.MustRegister(utils.FunctionDurationTimeCostTotal)
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostCount)
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostTotal)
-	mgr.AddMetricsExtraHandler("/stats", promhttp.Handler())
-	mgr.AddMetricsExtraHandler("/runtime", dumpRuntimeHandler())
+	mgr.AddMetricsExtraHandler("/stats/", promhttp.Handler())
+	mgr.AddMetricsExtraHandler("/runtime/", dumpRuntimeHandler())
 
 	setupReconcilers(mgr)
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -329,6 +329,7 @@ func setupBIGIPs(credsDir, confDir string) error {
 }
 
 func dumpRuntimeHandler() http.HandlerFunc {
+	slog := utils.LogFromContext(context.TODO())
 	if level != utils.LogLevel_Type_DEBUG {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Content-Type", "application/json")
@@ -338,12 +339,38 @@ func dumpRuntimeHandler() http.HandlerFunc {
 	} else {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Content-Type", "application/json")
-			if rlt, err := pkg.ActiveSIGs.DumpsAllResources(); err != nil {
-				w.WriteHeader(400)
-				fmt.Fprintf(w, `{"error": "failed to dump runtime objects: %s"}`, err.Error())
-			} else {
+			slog.Debugf("dumping request: %s?%s", r.URL.Path, r.URL.Query().Encode())
+			if r.URL.Path == "/runtime/" {
 				w.WriteHeader(200)
-				d, _ := json.MarshalIndent(rlt, "", "  ")
+				d, _ := json.MarshalIndent(pkg.ActiveSIGs, "", "  ")
+				fmt.Fprintf(w, "%s", string(d))
+				return
+			} else if strings.HasPrefix(r.URL.Path, "/runtime/trail") {
+				rlts := map[string]interface{}{}
+
+				queries := r.URL.Query()
+				for k, v := range queries {
+					switch k {
+					case "gatewayclass":
+						for _, cls := range v {
+							gwc := pkg.ActiveSIGs.GetGatewayClass(cls)
+							gws := pkg.ActiveSIGs.AttachedGateways(gwc)
+							if rlt, err := pkg.ParseGatewayRelatedForClass(cls, gws); err != nil {
+								w.WriteHeader(500)
+								fmt.Fprintf(w, `{"error": "failed to parse gateway class: %s: %s"}`, cls, err.Error())
+								return
+							} else {
+								rlts[cls] = rlt
+							}
+						}
+					default:
+						w.WriteHeader(400)
+						fmt.Fprintf(w, `{"error": "%s"}`, fmt.Sprintf("unsupported query type %s", k))
+						return
+					}
+				}
+				w.WriteHeader(200)
+				d, _ := json.MarshalIndent(rlts, "", "  ")
 				fmt.Fprintf(w, "%s", string(d))
 			}
 		}
