@@ -1,8 +1,8 @@
 package pkg
 
 import (
-	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
-	"gitee.com/zongzw/f5-bigip-rest/utils"
+	f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
+	"github.com/zongzw/f5-bigip-rest/utils"
 )
 
 func deploy(bc *f5_bigip.BIGIPContext, partition string, ocfgs, ncfgs *map[string]interface{}) error {

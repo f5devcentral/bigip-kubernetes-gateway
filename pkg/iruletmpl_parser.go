@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/template"
 
-	"gitee.com/zongzw/f5-bigip-rest/utils"
+	"github.com/zongzw/f5-bigip-rest/utils"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 

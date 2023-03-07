@@ -1,6 +1,6 @@
 package pkg
 
-import f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
+import f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
 
 var (
 	PendingDeploys chan DeployRequest

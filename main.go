@@ -44,8 +44,8 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/controllers"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
-	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
-	"gitee.com/zongzw/f5-bigip-rest/utils"
+	f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
+	"github.com/zongzw/f5-bigip-rest/utils"
 
 	//+kubebuilder:scaffold:imports
 

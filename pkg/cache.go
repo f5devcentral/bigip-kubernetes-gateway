@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
-	"gitee.com/zongzw/f5-bigip-rest/utils"
+	"github.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
