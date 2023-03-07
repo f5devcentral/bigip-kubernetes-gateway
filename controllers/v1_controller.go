@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
@@ -120,64 +119,22 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
+	// slog := utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel)
+	// lctx := context.WithValue(ctx, utils.CtxKey_Logger, slog)
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	ocfgs := map[string]interface{}{}
-	ncfgs := map[string]interface{}{}
-
 	var obj v1.Node
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			k8s.NodeCache.Unset(req.Name)
-			for _, c := range pkg.BIPConfigs {
-				if ncfgs, err = pkg.ParseNodeConfigs(&c); err != nil {
-					return ctrl.Result{}, err
-				}
-				if c.Management.Port == nil {
-					*c.Management.Port = 443
-				}
-				url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
-				pkg.PendingDeploys <- pkg.DeployRequest{
-					Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),
-					From:       &ocfgs,
-					To:         &ncfgs,
-					StatusFunc: func() {},
-					Partition:  "Common",
-					Context:    context.WithValue(lctx, pkg.CtxKey_SpecifiedBIGIP, url),
-				}
-			}
-
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
-		orig := k8s.NodeCache.Get(obj.Name)
 		k8s.NodeCache.Set(obj.DeepCopy())
-		// use reflect.DeepEqual to eliminate endless false-positive node events
-		if newa := k8s.NodeCache.Get(obj.Name); reflect.DeepEqual(orig, newa) {
-			return ctrl.Result{}, nil
-		}
-		for _, c := range pkg.BIPConfigs {
-			if ncfgs, err = pkg.ParseNodeConfigs(&c); err != nil {
-				return ctrl.Result{}, err
-			}
-			if c.Management.Port == nil {
-				*c.Management.Port = 443
-			}
-			url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
-			pkg.PendingDeploys <- pkg.DeployRequest{
-				Meta:       fmt.Sprintf("refreshing for request '%s'", req.Name),
-				From:       &ocfgs,
-				To:         &ncfgs,
-				StatusFunc: func() {},
-				Partition:  "Common",
-				Context:    context.WithValue(lctx, pkg.CtxKey_SpecifiedBIGIP, url),
-			}
-		}
 	}
 	return ctrl.Result{}, nil
 }
