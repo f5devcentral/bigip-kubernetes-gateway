@@ -29,6 +29,7 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
+	"github.com/zongzw/f5-bigip-rest/deployer"
 	"github.com/zongzw/f5-bigip-rest/utils"
 )
 
@@ -107,24 +108,18 @@ func handleDeletingGateway(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 		return ctrl.Result{}, err
 	}
 
-	pkg.PendingDeploys <- pkg.DeployRequest{
-		Meta: fmt.Sprintf("deleting gateway '%s'", req.NamespacedName.String()),
-		From: &ocfgs,
-		To:   &ncfgs,
-		StatusFunc: func() {
-			// do something
-		},
+	pkg.PendingDeploys <- deployer.DeployRequest{
+		Meta:      fmt.Sprintf("deleting gateway '%s'", req.NamespacedName.String()),
+		From:      &ocfgs,
+		To:        &ncfgs,
 		Partition: string(gw.Spec.GatewayClassName),
 		Context:   ctx,
 	}
 
-	pkg.PendingDeploys <- pkg.DeployRequest{
-		Meta: fmt.Sprintf("updating services for event '%s'", req.NamespacedName.String()),
-		From: &opcfgs,
-		To:   &npcfgs,
-		StatusFunc: func() {
-			// do something
-		},
+	pkg.PendingDeploys <- deployer.DeployRequest{
+		Meta:      fmt.Sprintf("updating services for event '%s'", req.NamespacedName.String()),
+		From:      &opcfgs,
+		To:        &npcfgs,
 		Partition: "cis-c-tenant",
 		Context:   ctx,
 	}
@@ -172,24 +167,18 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("upserting services for gateway '%s'", reqnsn),
-			From: &opcfgs,
-			To:   &npcfgs,
-			StatusFunc: func() {
-				// do something
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      fmt.Sprintf("upserting services for gateway '%s'", reqnsn),
+			From:      &opcfgs,
+			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("upserting gateway '%s'", reqnsn),
-			From: &ocfgs,
-			To:   &ncfgs,
-			StatusFunc: func() {
-				// do something
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      fmt.Sprintf("upserting gateway '%s'", reqnsn),
+			From:      &ocfgs,
+			To:        &ncfgs,
 			Partition: string(ngw.Spec.GatewayClassName),
 			Context:   ctx,
 		}
@@ -213,13 +202,10 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("upserting services for gateway '%s'", reqnsn),
-			From: &opcfgs,
-			To:   &npcfgs,
-			StatusFunc: func() {
-				// do something
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      fmt.Sprintf("upserting services for gateway '%s'", reqnsn),
+			From:      &opcfgs,
+			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
 		}
@@ -232,13 +218,10 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("upserting gateway '%s'", reqnsn),
-			From: &ocfgs1,
-			To:   &ncfgs1,
-			StatusFunc: func() {
-				// do something
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      fmt.Sprintf("upserting gateway '%s'", reqnsn),
+			From:      &ocfgs1,
+			To:        &ncfgs1,
 			Partition: string(ogw.Spec.GatewayClassName),
 			Context:   ctx,
 		}
@@ -252,13 +235,10 @@ func handleUpsertingGateway(ctx context.Context, obj *gatewayv1beta1.Gateway) (c
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("upserting gateway '%s'", reqnsn),
-			From: &ocfgs2,
-			To:   &ncfgs2,
-			StatusFunc: func() {
-				// do something
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      fmt.Sprintf("upserting gateway '%s'", reqnsn),
+			From:      &ocfgs2,
+			To:        &ncfgs2,
 			Partition: string(ngw.Spec.GatewayClassName),
 			Context:   ctx,
 		}

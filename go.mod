@@ -7,7 +7,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.6.0
 	github.com/onsi/gomega v1.24.1
 	github.com/prometheus/client_golang v1.14.0
-	github.com/zongzw/f5-bigip-rest v1.0.0
+	github.com/zongzw/f5-bigip-rest v1.0.2
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.26.1
 	k8s.io/apimachinery v0.26.1

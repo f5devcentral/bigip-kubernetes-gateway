@@ -1,21 +1,11 @@
 package pkg
 
 import (
-	"context"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
-
-type DeployRequest struct {
-	Meta       string
-	From       *map[string]interface{}
-	To         *map[string]interface{}
-	Partition  string
-	StatusFunc func()
-	Context    context.Context
-}
 
 type CtxKeyType string
 
