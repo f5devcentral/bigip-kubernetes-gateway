@@ -103,39 +103,3 @@ func (ns *Nodes) All() map[string]K8Node {
 	}
 	return rlt
 }
-
-func (ns *Nodes) AllIpAddresses() []string {
-	NodeCache.mutex <- true
-	defer func() { <-NodeCache.mutex }()
-
-	rlt := []string{}
-	for _, n := range ns.Items {
-		if n.IpAddr != "" {
-			rlt = append(rlt, n.IpAddr)
-		}
-		if n.IpAddrV6 != "" {
-			rlt = append(rlt, n.IpAddrV6)
-		}
-
-	}
-	return rlt
-}
-
-func (ns *Nodes) AllIpToMac() (map[string]string, map[string]string) {
-	NodeCache.mutex <- true
-	defer func() { <-NodeCache.mutex }()
-
-	rlt4 := map[string]string{}
-	rlt6 := map[string]string{}
-
-	for _, n := range ns.Items {
-		if len(n.IpAddr) > 0 && len(n.MacAddr) > 0 {
-			rlt4[n.IpAddr] = n.MacAddr
-		}
-		if len(n.IpAddrV6) > 0 && len(n.MacAddrV6) > 0 {
-			rlt6[n.IpAddrV6] = n.MacAddrV6
-		}
-
-	}
-	return rlt4, rlt6
-}

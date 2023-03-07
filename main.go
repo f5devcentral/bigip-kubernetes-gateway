@@ -25,12 +25,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
-	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v3"
@@ -147,7 +145,6 @@ func main() {
 	stopCh := make(chan struct{})
 	go pkg.Deployer(stopCh, pkg.BIGIPs)
 	go pkg.ActiveSIGs.SyncAllResources(mgr)
-	go applyNodeConfigsAtStart()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
@@ -186,36 +183,6 @@ func getConfigs(bigipConfigs *pkg.BIGIPConfigs, confDir string) error {
 		return fmt.Errorf("failed to unmarshal yaml content: %s", err.Error())
 	}
 	return nil
-}
-
-func applyNodeConfigsAtStart() {
-	for {
-		<-time.After(100 * time.Millisecond)
-		if pkg.ActiveSIGs.SyncedAtStart {
-			break
-		}
-	}
-
-	lctx := context.WithValue(context.TODO(), utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(level))
-	for _, c := range pkg.BIPConfigs {
-		if ncfgs, err := pkg.ParseNodeConfigs(&c); err != nil {
-			setupLog.Error(err, "unable to parse nodes config for net setup")
-			os.Exit(1)
-		} else {
-			if c.Management.Port == nil {
-				*c.Management.Port = 443
-			}
-			url := fmt.Sprintf("https://%s:%d", c.Management.IpAddress, *c.Management.Port)
-			pkg.PendingDeploys <- pkg.DeployRequest{
-				Meta:       "net setup at startup",
-				From:       nil,
-				To:         &ncfgs,
-				StatusFunc: func() {},
-				Partition:  "Common",
-				Context:    context.WithValue(lctx, pkg.CtxKey_SpecifiedBIGIP, url),
-			}
-		}
-	}
 }
 
 func setupReconcilers(mgr manager.Manager) {
@@ -269,12 +236,7 @@ func setupBIGIPs(credsDir, confDir string) error {
 	}
 
 	errs := []string{}
-	for i, c := range pkg.BIPConfigs {
-		if c.Management == nil {
-			errs = append(errs, fmt.Sprintf("config #%d: missing management section", i))
-			continue
-		}
-
+	for _, c := range pkg.BIPConfigs {
 		if c.Management.Port == nil {
 			*c.Management.Port = 443
 		}
@@ -282,44 +244,6 @@ func setupBIGIPs(credsDir, confDir string) error {
 		username := c.Management.Username
 		bigip := f5_bigip.New(url, username, pkg.BIPPassword)
 		pkg.BIGIPs = append(pkg.BIGIPs, bigip)
-
-		bc := &f5_bigip.BIGIPContext{BIGIP: *bigip, Context: context.TODO()}
-		if c.Calico != nil {
-			if err := pkg.EnableBGPRouting(bc); err != nil {
-				errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
-				continue
-			}
-		}
-		if c.Flannel != nil {
-			for _, tunnel := range c.Flannel.Tunnels {
-				vxlanProfileName := tunnel.ProfileName
-				vxlanPort := tunnel.Port
-				vxlanTunnelName := tunnel.Name
-				vxlanLocalAddress := tunnel.LocalAddress
-
-				if err := bc.CreateVxlanProfile(vxlanProfileName, fmt.Sprintf("%d", vxlanPort)); err != nil {
-					errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
-					continue
-				}
-				if err := bc.CreateTunnel(vxlanTunnelName, "1", vxlanLocalAddress, vxlanProfileName); err != nil {
-					errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
-					continue
-				}
-			}
-			for _, selfip := range c.Flannel.SelfIPs {
-				selfIpName := selfip.Name
-				selfIpAddress := selfip.IpMask
-				selfIpTunnel := selfip.TunnelName
-
-				if err := bc.CreateSelf(selfIpName, selfIpAddress, selfIpTunnel); err != nil {
-					errs = append(errs, fmt.Sprintf("config #%d: %s", i, err.Error()))
-					continue
-				}
-			}
-		}
-		if c.K8S != nil {
-			// if possible to configure gateway integration in end-to-end automation.
-		}
 	}
 	if len(errs) != 0 {
 		return fmt.Errorf(strings.Join(errs, "; "))
