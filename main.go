@@ -186,6 +186,7 @@ func getConfigs(bigipConfigs *pkg.BIGIPConfigs, confDir string) error {
 }
 
 func setupReconcilers(mgr manager.Manager) {
+
 	if err := (&controllers.GatewayClassReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
@@ -203,6 +204,7 @@ func setupReconcilers(mgr manager.Manager) {
 		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
 		os.Exit(1)
 	}
+
 	if err := (&controllers.HttpRouteReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
@@ -211,6 +213,7 @@ func setupReconcilers(mgr manager.Manager) {
 		setupLog.Error(err, "unable to create controller", "controller", "HttpRoute")
 		os.Exit(1)
 	}
+
 	if err := (&controllers.ReferenceGrantReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
@@ -218,6 +221,14 @@ func setupReconcilers(mgr manager.Manager) {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ReferenceGrant")
 		os.Exit(1)
+	}
+
+	if err := (&controllers.SecretReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		LogLevel: level,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "conntroller", "Secret")
 	}
 
 	if err := controllers.SetupReconcilerForCoreV1WithManager(mgr, level); err != nil {

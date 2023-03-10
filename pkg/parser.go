@@ -7,6 +7,7 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/f5-bigip-rest/utils"
+	v1 "k8s.io/api/core/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -171,9 +172,17 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 			for _, listener := range gw.Spec.Listeners {
 				var profiles []interface{}
 				ipProtocol := ""
+
 				switch listener.Protocol {
 				case gatewayv1beta1.HTTPProtocolType:
 					profiles = []interface{}{map[string]string{"name": "http"}}
+					ipProtocol = "tcp"
+				case gatewayv1beta1.HTTPSProtocolType:
+					ssl_profiles := parseSSL(&listener, rlt, gw.Namespace)
+					profiles = []interface{}{map[string]string{"name": "http"}}
+					for _, ssl := range ssl_profiles {
+						profiles = append(profiles, map[string]string{"name": ssl})
+					}
 					ipProtocol = "tcp"
 				case gatewayv1beta1.TCPProtocolType:
 					return map[string]interface{}{}, fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
@@ -182,6 +191,7 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 				case gatewayv1beta1.TLSProtocolType:
 					return map[string]interface{}{}, fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
 				}
+
 				if ipProtocol == "" {
 					return map[string]interface{}{}, fmt.Errorf("ipProtocol not set in %s case", listener.Protocol)
 				}
@@ -284,4 +294,83 @@ func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) er
 		}
 	}
 	return nil
+}
+
+func parseSSL(ls *gatewayv1beta1.Listener, rlt map[string]any, nameSpace string) []string {
+	certRefs := ls.TLS.CertificateRefs
+	uploadURI := "shared/file-transfer/uploads/"
+	sslCertURI := "sys/file/ssl-cert/"
+	sslKeyURI := "sys/file/ssl-key/"
+	profileURI := "ltm/profile/client-ssl/"
+	var profileNames []string
+
+	for i, cert := range certRefs {
+
+		if cert.Namespace != nil {
+			// dereference the pointer
+			nameSpace = string(*cert.Namespace)
+		}
+
+		nameSpacedName := utils.Keyname(nameSpace, string(cert.Name))
+		scrt := ActiveSIGs.GetSecret(nameSpacedName)
+
+		/*
+			TODO: what if existed gateway (old/new) (yaml) uses some tls secrets
+			are deleted by user? we need some ways to tell user the gateway yaml
+			is not up to date or wrong.
+
+			1. It prevents user from misconfiguring the gateway.
+			2. It prevents bigip from dirty configuration.
+
+			Maybe we needs status or webhook to solve this problem.
+
+			For now, we just IGNORE the problem, and leave some dirty tls
+			configurations on BigIP.
+		*/
+		if scrt == nil || scrt.Type != v1.SecretTypeTLS {
+			continue
+		}
+
+		crtContent := string(scrt.Data[v1.TLSCertKey])
+		keyContent := string(scrt.Data[v1.TLSPrivateKeyKey])
+
+		crtName := nameSpace + "_" + string(cert.Name) + ".crt"
+		keyName := nameSpace + "_" + string(cert.Name) + ".key"
+
+		rlt[uploadURI+crtName] = map[string]any{
+			"content": crtContent,
+		}
+		rlt[uploadURI+keyName] = map[string]any{
+			"content": keyContent,
+		}
+
+		rlt[sslCertURI+crtName] = map[string]any{
+			"name":       crtName,
+			"sourcePath": "file:/var/config/rest/downloads/" + crtName,
+		}
+		rlt[sslKeyURI+keyName] = map[string]any{
+			"name":       keyName,
+			"sourcePath": "file:/var/config/rest/downloads/" + keyName,
+			"passphrase": "",
+		}
+
+		profileName := nameSpace + "_" + string(cert.Name)
+		sniDefault := false
+
+		// NOTE: if there are multiple cerficate. we always set the first
+		// certificate as the SNI default certificate.
+		if i == 0 {
+			sniDefault = true
+		}
+
+		rlt[profileURI+profileName] = map[string]any{
+			"name":       profileName,
+			"cert":       crtName,
+			"key":        keyName,
+			"sniDefault": sniDefault,
+		}
+
+		profileNames = append(profileNames, profileName)
+	}
+	return profileNames
 }
