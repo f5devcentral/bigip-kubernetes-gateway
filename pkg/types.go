@@ -30,6 +30,7 @@ type SIGCache struct {
 	GatewayClass   map[string]*gatewayv1beta1.GatewayClass
 	Namespace      map[string]*v1.Namespace
 	ReferenceGrant map[string]*gatewayv1beta1.ReferenceGrant
+	Secret         map[string]*v1.Secret
 }
 
 type ReferenceGrantFromTo map[string]map[string]int8
