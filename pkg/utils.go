@@ -67,7 +67,11 @@ func routeMatches(gwNamespace string, listener *gatewayv1beta1.Listener, routeNa
 		case gatewayv1beta1.HTTPProtocolType:
 			matchedKind = routeType == reflect.TypeOf(gatewayv1beta1.HTTPRoute{}).Name()
 		case gatewayv1beta1.HTTPSProtocolType:
-			return false
+			types := []string{
+				reflect.TypeOf(gatewayv1beta1.HTTPRoute{}).Name(),
+				// add other route types here.
+			}
+			matchedKind = utils.Contains(types, routeType)
 		case gatewayv1beta1.TLSProtocolType:
 			return false
 		case gatewayv1beta1.TCPProtocolType:
