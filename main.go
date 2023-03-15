@@ -44,8 +44,9 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/controllers"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
-	f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
-	"gitee.com/zongzw/f5-bigip-rest/utils"
+	f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
+	"github.com/zongzw/f5-bigip-rest/deployer"
+	"github.com/zongzw/f5-bigip-rest/utils"
 
 	//+kubebuilder:scaffold:imports
 
@@ -56,6 +57,7 @@ var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 	level    = utils.LogLevel_Type_INFO
+	stopCh   = make(chan struct{})
 )
 
 func init() {
@@ -100,6 +102,7 @@ func main() {
 		os.Exit(1)
 	}
 	pkg.LogLevel = level
+	pkg.PendingDeploys, pkg.DoneDeploys = deployer.Deployer(stopCh, pkg.BIGIPs)
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -142,10 +145,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	stopCh := make(chan struct{})
-	go pkg.Deployer(stopCh, pkg.BIGIPs)
 	go pkg.ActiveSIGs.SyncAllResources(mgr)
 
+	defer close(stopCh)
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")

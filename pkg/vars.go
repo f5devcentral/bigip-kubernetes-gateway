@@ -1,19 +1,17 @@
 package pkg
 
-import f5_bigip "gitee.com/zongzw/f5-bigip-rest/bigip"
+import (
+	f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
+	"github.com/zongzw/f5-bigip-rest/deployer"
+)
 
 var (
-	PendingDeploys chan DeployRequest
+	PendingDeploys chan deployer.DeployRequest
+	DoneDeploys    *deployer.DeployResponses
 	ActiveSIGs     *SIGCache
 	BIGIPs         []*f5_bigip.BIGIP
 	BIPConfigs     BIGIPConfigs
 	BIPPassword    string
 	refFromTo      *ReferenceGrantFromTo
 	LogLevel       string
-)
-
-const (
-	CtxKey_DeletePartition CtxKeyType = "delete_partition"
-	CtxKey_CreatePartition CtxKeyType = "create_partition"
-	CtxKey_SpecifiedBIGIP  CtxKeyType = "specified_bigip"
 )
