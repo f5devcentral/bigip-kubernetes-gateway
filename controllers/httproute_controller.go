@@ -22,8 +22,9 @@ import (
 	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
-	"gitee.com/zongzw/f5-bigip-rest/utils"
 	"github.com/google/uuid"
+	"github.com/zongzw/f5-bigip-rest/deployer"
+	"github.com/zongzw/f5-bigip-rest/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -87,10 +88,10 @@ func (r *HttpRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
 	gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
-	drs := map[string]*pkg.DeployRequest{}
+	drs := map[string]*deployer.DeployRequest{}
 	for _, gw := range gws {
 		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-			drs[string(gw.Spec.GatewayClassName)] = &pkg.DeployRequest{
+			drs[string(gw.Spec.GatewayClassName)] = &deployer.DeployRequest{
 				Meta:      fmt.Sprintf("deleting httproute '%s'", req.NamespacedName.String()),
 				Partition: string(gw.Spec.GatewayClassName),
 			}
@@ -118,7 +119,7 @@ func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result
 	for _, gw := range gws {
 
 		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-			drs[string(gw.Spec.GatewayClassName)] = &pkg.DeployRequest{
+			drs[string(gw.Spec.GatewayClassName)] = &deployer.DeployRequest{
 				Meta:      fmt.Sprintf("deleting httproute '%s'", req.NamespacedName.String()),
 				Partition: string(gw.Spec.GatewayClassName),
 			}
@@ -132,23 +133,19 @@ func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result
 	}
 
 	for _, dr := range drs {
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: dr.Meta,
-			From: dr.From,
-			To:   dr.To,
-			StatusFunc: func() {
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      dr.Meta,
+			From:      dr.From,
+			To:        dr.To,
 			Partition: dr.Partition,
 			Context:   ctx,
 		}
 	}
 
-	pkg.PendingDeploys <- pkg.DeployRequest{
-		Meta: fmt.Sprintf("updating services for deleting httproute '%s'", req.NamespacedName.String()),
-		From: &opcfgs,
-		To:   &npcfgs,
-		StatusFunc: func() {
-		},
+	pkg.PendingDeploys <- deployer.DeployRequest{
+		Meta:      fmt.Sprintf("updating services for deleting httproute '%s'", req.NamespacedName.String()),
+		From:      &opcfgs,
+		To:        &npcfgs,
 		Partition: "cis-c-tenant",
 		Context:   ctx,
 	}
@@ -163,11 +160,11 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 
 	hr := pkg.ActiveSIGs.GetHTTPRoute(reqnsn)
 	gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
-	drs := map[string]*pkg.DeployRequest{}
+	drs := map[string]*deployer.DeployRequest{}
 
 	for _, gw := range gws {
 		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-			drs[string(gw.Spec.GatewayClassName)] = &pkg.DeployRequest{
+			drs[string(gw.Spec.GatewayClassName)] = &deployer.DeployRequest{
 				Meta:      fmt.Sprintf("upserting httproute '%s'", reqnsn),
 				Partition: string(gw.Spec.GatewayClassName),
 			}
@@ -198,7 +195,7 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 
 	for _, gw := range gws {
 		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-			drs[string(gw.Spec.GatewayClassName)] = &pkg.DeployRequest{
+			drs[string(gw.Spec.GatewayClassName)] = &deployer.DeployRequest{
 				Meta:      fmt.Sprintf("upserting httproute '%s'", reqnsn),
 				Partition: string(gw.Spec.GatewayClassName),
 			}
@@ -211,23 +208,19 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 		}
 	}
 
-	pkg.PendingDeploys <- pkg.DeployRequest{
-		Meta: fmt.Sprintf("updating services for upserting httproute '%s'", reqnsn),
-		From: &opcfgs,
-		To:   &npcfgs,
-		StatusFunc: func() {
-		},
+	pkg.PendingDeploys <- deployer.DeployRequest{
+		Meta:      fmt.Sprintf("updating services for upserting httproute '%s'", reqnsn),
+		From:      &opcfgs,
+		To:        &npcfgs,
 		Partition: "cis-c-tenant",
 		Context:   ctx,
 	}
 
 	for _, dr := range drs {
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: dr.Meta,
-			From: dr.From,
-			To:   dr.To,
-			StatusFunc: func() {
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      dr.Meta,
+			From:      dr.From,
+			To:        dr.To,
 			Partition: dr.Partition,
 			Context:   ctx,
 		}

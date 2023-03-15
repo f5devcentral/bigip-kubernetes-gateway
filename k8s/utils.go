@@ -3,7 +3,7 @@ package k8s
 import (
 	"fmt"
 
-	"gitee.com/zongzw/f5-bigip-rest/utils"
+	"github.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
 )
 

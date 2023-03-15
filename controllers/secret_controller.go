@@ -23,26 +23,27 @@ import (
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
 	"github.com/google/uuid"
 	"github.com/zongzw/f5-bigip-rest/utils"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-type ReferenceGrantReconciler struct {
-	client.Client
-	Scheme   *runtime.Scheme
+type SecretReconciler struct {
+	Client client.Client
+	Scheme *runtime.Scheme
+	// Cache    cache.Cache
 	LogLevel string
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ReferenceGrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1beta1.ReferenceGrant{}).
+		For(&v1.Secret{}).
 		Complete(r)
 }
 
-func (r *ReferenceGrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)
 		return ctrl.Result{Requeue: true}, nil
@@ -51,20 +52,18 @@ func (r *ReferenceGrantReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
 	slog := utils.LogFromContext(lctx)
 
-	var obj gatewayv1beta1.ReferenceGrant
-	slog.Infof("referencegrant event: %s", req.NamespacedName)
-	// TODO: update resources mappings since grant items are changed.
-	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			// delete resources
-			pkg.ActiveSIGs.UnsetReferenceGrant(req.NamespacedName.String())
-			return ctrl.Result{}, nil
-		} else {
+	var obj v1.Secret
+	slog.Infof("serect event: %s", req.NamespacedName)
+
+	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
+		if client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, err
 		}
-	} else {
-		// upsert resources
-		pkg.ActiveSIGs.SetReferenceGrant(obj.DeepCopy())
+		// Can not find Sercet, remove it from the local cache
+		pkg.ActiveSIGs.UnsetSerect(req.NamespacedName.String())
 		return ctrl.Result{}, nil
 	}
+	// Find Secret, add it to the local cache.
+	pkg.ActiveSIGs.SetSecret(obj.DeepCopy())
+	return ctrl.Result{}, nil
 }

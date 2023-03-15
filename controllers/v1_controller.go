@@ -23,8 +23,9 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
-	"gitee.com/zongzw/f5-bigip-rest/utils"
 	"github.com/google/uuid"
+	"github.com/zongzw/f5-bigip-rest/deployer"
+	"github.com/zongzw/f5-bigip-rest/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -189,12 +190,10 @@ func handleDeletingEndpoints(ctx context.Context, req ctrl.Request) (ctrl.Result
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
-			From: &opcfgs,
-			To:   &npcfgs,
-			StatusFunc: func() {
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
+			From:      &opcfgs,
+			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
 		}
@@ -229,12 +228,10 @@ func handleUpsertingEndpoints(ctx context.Context, obj *v1.Endpoints) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("upserting endpoints '%s'", reqnsn),
-			From: &opcfgs,
-			To:   &npcfgs,
-			StatusFunc: func() {
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      fmt.Sprintf("upserting endpoints '%s'", reqnsn),
+			From:      &opcfgs,
+			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
 		}
@@ -266,12 +263,10 @@ func handleDeletingService(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
-			From: &opcfgs,
-			To:   &npcfgs,
-			StatusFunc: func() {
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
+			From:      &opcfgs,
+			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
 		}
@@ -307,12 +302,10 @@ func handleUpsertingService(ctx context.Context, obj *v1.Service) (ctrl.Result, 
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- pkg.DeployRequest{
-			Meta: fmt.Sprintf("upserting service '%s'", reqnsn),
-			From: &opcfgs,
-			To:   &npcfgs,
-			StatusFunc: func() {
-			},
+		pkg.PendingDeploys <- deployer.DeployRequest{
+			Meta:      fmt.Sprintf("upserting service '%s'", reqnsn),
+			From:      &opcfgs,
+			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
 		}

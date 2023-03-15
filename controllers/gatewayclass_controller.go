@@ -22,8 +22,9 @@ import (
 	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
-	"gitee.com/zongzw/f5-bigip-rest/utils"
 	"github.com/google/uuid"
+	"github.com/zongzw/f5-bigip-rest/deployer"
+	"github.com/zongzw/f5-bigip-rest/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -131,23 +132,19 @@ func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Res
 		return ctrl.Result{}, err
 	}
 
-	dctx := context.WithValue(ctx, pkg.CtxKey_DeletePartition, "yes")
-	pkg.PendingDeploys <- pkg.DeployRequest{
-		Meta: fmt.Sprintf("clearing gateways for gatewayclass '%s'", req.Name),
-		From: &ocfgs,
-		To:   nil,
-		StatusFunc: func() {
-		},
+	dctx := context.WithValue(ctx, deployer.CtxKey_DeletePartition, "yes")
+	pkg.PendingDeploys <- deployer.DeployRequest{
+		Meta:      fmt.Sprintf("clearing gateways for gatewayclass '%s'", req.Name),
+		From:      &ocfgs,
+		To:        nil,
 		Partition: req.Name,
 		Context:   dctx,
 	}
 
-	pkg.PendingDeploys <- pkg.DeployRequest{
-		Meta: fmt.Sprintf("updating services for gatewayclass '%s'", req.Name),
-		From: &opcfgs,
-		To:   &npcfgs,
-		StatusFunc: func() {
-		},
+	pkg.PendingDeploys <- deployer.DeployRequest{
+		Meta:      fmt.Sprintf("updating services for gatewayclass '%s'", req.Name),
+		From:      &opcfgs,
+		To:        &npcfgs,
 		Partition: "cis-c-tenant",
 		Context:   ctx,
 	}
@@ -192,23 +189,21 @@ func handleUpsertingGatewayClass(ctx context.Context, obj *gatewayv1beta1.Gatewa
 		return ctrl.Result{}, err
 	}
 
-	pkg.PendingDeploys <- pkg.DeployRequest{
-		Meta:       fmt.Sprintf("refreshing services for gatewayclass '%s'", reqn),
-		From:       &opcfgs,
-		To:         &npcfgs,
-		StatusFunc: func() {},
-		Partition:  "cis-c-tenant",
-		Context:    ctx,
+	pkg.PendingDeploys <- deployer.DeployRequest{
+		Meta:      fmt.Sprintf("refreshing services for gatewayclass '%s'", reqn),
+		From:      &opcfgs,
+		To:        &npcfgs,
+		Partition: "cis-c-tenant",
+		Context:   ctx,
 	}
 
-	cctx := context.WithValue(ctx, pkg.CtxKey_CreatePartition, "yes")
-	pkg.PendingDeploys <- pkg.DeployRequest{
-		Meta:       fmt.Sprintf("refreshing gateways for gatewayclass '%s'", reqn),
-		From:       &ocfgs,
-		To:         &ncfgs,
-		StatusFunc: func() {},
-		Partition:  reqn,
-		Context:    cctx,
+	cctx := context.WithValue(ctx, deployer.CtxKey_CreatePartition, "yes")
+	pkg.PendingDeploys <- deployer.DeployRequest{
+		Meta:      fmt.Sprintf("refreshing gateways for gatewayclass '%s'", reqn),
+		From:      &ocfgs,
+		To:        &ncfgs,
+		Partition: reqn,
+		Context:   cctx,
 	}
 
 	return ctrl.Result{}, nil

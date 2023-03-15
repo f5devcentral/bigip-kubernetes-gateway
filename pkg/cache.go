@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/k8s"
-	"gitee.com/zongzw/f5-bigip-rest/utils"
+	"github.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -21,7 +21,6 @@ import (
 )
 
 func init() {
-	PendingDeploys = make(chan DeployRequest, 16)
 	ActiveSIGs = &SIGCache{
 		mutex:          sync.RWMutex{},
 		SyncedAtStart:  false,
@@ -33,6 +32,7 @@ func init() {
 		GatewayClass:   map[string]*gatewayv1beta1.GatewayClass{},
 		Namespace:      map[string]*v1.Namespace{},
 		ReferenceGrant: map[string]*gatewayv1beta1.ReferenceGrant{},
+		Secret:         map[string]*v1.Secret{},
 	}
 	refFromTo = &ReferenceGrantFromTo{}
 }
@@ -171,6 +171,28 @@ func (c *SIGCache) UnsetService(keyname string) {
 	defer c.mutex.Unlock()
 
 	delete(c.Service, keyname)
+}
+
+func (c *SIGCache) SetSecret(scrt *v1.Secret) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	keyname := utils.Keyname(scrt.Namespace, scrt.Name)
+	c.Secret[keyname] = scrt
+}
+
+func (c *SIGCache) UnsetSerect(keyname string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	delete(c.Secret, keyname)
+}
+
+func (c *SIGCache) GetSecret(keyname string) *v1.Secret {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.Secret[keyname]
 }
 
 func (c *SIGCache) SetReferenceGrant(rg *gatewayv1beta1.ReferenceGrant) {
@@ -572,6 +594,16 @@ func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 			k8s.NodeCache.Set(&n)
 		}
 	}
+
+	if secList, err := kubeClient.CoreV1().Secrets(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
+		return err
+	} else {
+		for _, sec := range secList.Items {
+			slog.Debugf("found secret %s", sec.Name)
+			c.Secret[utils.Keyname(sec.Namespace, sec.Name)] = sec.DeepCopy()
+		}
+	}
+
 	return nil
 }
 
