@@ -178,10 +178,16 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 					profiles = []interface{}{map[string]string{"name": "http"}}
 					ipProtocol = "tcp"
 				case gatewayv1beta1.HTTPSProtocolType:
-					ssl_profiles := parseSSL(&listener, rlt, gw.Namespace)
 					profiles = []interface{}{map[string]string{"name": "http"}}
-					for _, ssl := range ssl_profiles {
-						profiles = append(profiles, map[string]string{"name": ssl})
+					if listener.TLS == nil {
+						return map[string]interface{}{}, fmt.Errorf("listener.TLS must be set for protocol %s", listener.Protocol)
+					} else {
+						if listener.TLS.Mode == nil || *listener.TLS.Mode == gatewayv1beta1.TLSModeTerminate {
+							ssl_profiles := parseSSL(&listener, rlt, gw)
+							for _, ssl := range ssl_profiles {
+								profiles = append(profiles, map[string]string{"name": ssl})
+							}
+						}
 					}
 					ipProtocol = "tcp"
 				case gatewayv1beta1.TCPProtocolType:
@@ -296,23 +302,17 @@ func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) er
 	return nil
 }
 
-func parseSSL(ls *gatewayv1beta1.Listener, rlt map[string]any, nameSpace string) []string {
+func parseSSL(ls *gatewayv1beta1.Listener, rlt map[string]any, gw *gatewayv1beta1.Gateway) []string {
 	certRefs := ls.TLS.CertificateRefs
-	uploadURI := "shared/file-transfer/uploads/"
-	sslCertURI := "sys/file/ssl-cert/"
-	sslKeyURI := "sys/file/ssl-key/"
-	profileURI := "ltm/profile/client-ssl/"
 	var profileNames []string
 
+	ns := gw.Namespace
 	for i, cert := range certRefs {
-
 		if cert.Namespace != nil {
-			// dereference the pointer
-			nameSpace = string(*cert.Namespace)
+			ns = string(*cert.Namespace)
 		}
-
-		nameSpacedName := utils.Keyname(nameSpace, string(cert.Name))
-		scrt := ActiveSIGs.GetSecret(nameSpacedName)
+		nsn := utils.Keyname(ns, string(cert.Name))
+		scrt := ActiveSIGs.GetSecret(nsn)
 
 		/*
 			TODO: what if existed gateway (old/new) (yaml) uses some tls secrets
@@ -330,44 +330,39 @@ func parseSSL(ls *gatewayv1beta1.Listener, rlt map[string]any, nameSpace string)
 		if scrt == nil || scrt.Type != v1.SecretTypeTLS {
 			continue
 		}
-
+		if !ActiveSIGs.CanRefer(gw, scrt) {
+			continue
+		}
 		crtContent := string(scrt.Data[v1.TLSCertKey])
 		keyContent := string(scrt.Data[v1.TLSPrivateKeyKey])
 
-		crtName := nameSpace + "_" + string(cert.Name) + ".crt"
-		keyName := nameSpace + "_" + string(cert.Name) + ".key"
+		crtName := ns + "_" + string(cert.Name) + ".crt"
+		keyName := ns + "_" + string(cert.Name) + ".key"
 
-		rlt[uploadURI+crtName] = map[string]any{
+		rlt["shared/file-transfer/uploads/"+crtName] = map[string]any{
 			"content": crtContent,
 		}
-		rlt[uploadURI+keyName] = map[string]any{
+		rlt["shared/file-transfer/uploads/"+keyName] = map[string]any{
 			"content": keyContent,
 		}
 
-		rlt[sslCertURI+crtName] = map[string]any{
+		rlt["sys/file/ssl-cert/"+crtName] = map[string]any{
 			"name":       crtName,
 			"sourcePath": "file:/var/config/rest/downloads/" + crtName,
 		}
-		rlt[sslKeyURI+keyName] = map[string]any{
+		rlt["sys/file/ssl-key/"+keyName] = map[string]any{
 			"name":       keyName,
 			"sourcePath": "file:/var/config/rest/downloads/" + keyName,
 			"passphrase": "",
 		}
 
-		profileName := nameSpace + "_" + string(cert.Name)
-		sniDefault := false
+		profileName := ns + "_" + string(cert.Name)
 
-		// NOTE: if there are multiple cerficate. we always set the first
-		// certificate as the SNI default certificate.
-		if i == 0 {
-			sniDefault = true
-		}
-
-		rlt[profileURI+profileName] = map[string]any{
+		rlt["ltm/profile/client-ssl/"+profileName] = map[string]any{
 			"name":       profileName,
 			"cert":       crtName,
 			"key":        keyName,
-			"sniDefault": sniDefault,
+			"sniDefault": i == 0,
 		}
 
 		profileNames = append(profileNames, profileName)
