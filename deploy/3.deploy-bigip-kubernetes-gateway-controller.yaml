@@ -9,6 +9,48 @@ data:
   password: UEBzc3cwcmQxMjM=   # base64 encoded
 type: Opaque
 
+apiVersion: v1
+type: kubernetes.io/tls
+kind: Secret
+metadata:
+  name: webhook-server-cert
+  namespace: kube-system
+data:
+  ca.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkekNDQVIyZ0F3SUJBZ0lSQUtkNWZCd1NzZ3Q0Ri95UWRyRUZMcW93Q2dZSUtvWkl6ajBFQXdJd0d6RVoKTUJjR0ExVUVBeE1RYlhrdGMyVnNabk5wWjI1bFpDMWpZVEFlRncweU16QXpNVGN3TkRVME16QmFGdzB5TXpBMgpNVFV3TkRVME16QmFNQnN4R1RBWEJnTlZCQU1URUcxNUxYTmxiR1p6YVdkdVpXUXRZMkV3V1RBVEJnY3Foa2pPClBRSUJCZ2dxaGtqT1BRTUJCd05DQUFRR2pCajFtQUhSMHJCSHpmOHh1UlAzT05MZVh2Um5vSTRkaGh0SklLSi8KemdSNU54OXdqNUtMUkovY1N3WHVWeVBua0o0T1YzM2kxYTJaKzlFVFZ4R3lvMEl3UURBT0JnTlZIUThCQWY4RQpCQU1DQXFRd0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVVJ1S3QrYWhCejBEV2xXcERmT0VGCnNyTnpXSkl3Q2dZSUtvWkl6ajBFQXdJRFNBQXdSUUloQVBqeWZ4dmg5VTVNY0MveDNQUHNvNlJZcHE1VFhadVgKWnYwbVJWMzNxUjQ0QWlBUGRzaFEzZDJQNitqRnNEVWJFRTA4b3p1WEZrTTY0YVVSbWVUTUVZREZqdz09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNvakNDQWttZ0F3SUJBZ0lRREZZekw1RVFqaERGNkRubFNRRFV6REFLQmdncWhrak9QUVFEQWpBYk1Sa3cKRndZRFZRUURFeEJ0ZVMxelpXeG1jMmxuYm1Wa0xXTmhNQjRYRFRJek1ETXhOekEyTlRJeU9Gb1hEVEl6TURZeApOVEEyTlRJeU9Gb3dBRENDQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQkFNMSttM1lICldPeGZLL09nYjhlcVlXRVljanhpbXAxZ3lxTFJGaXNxUVFaZ0kzb1RMUlVtYkZ1TUtLcmtiSndFYk1PbDVFL3oKcTdLTkVkd1JRNkVKVVNERkZMS1ZKbmRhdDlYTDU0RXdqSjZWMndreFVqMFZjbHIzU3kybitNUVJ5R0IwK3kvWQp3S2p0Y2ZMNW5PWEJGZGY0S3I1Z29lUWpwTDVwdEljWTNvRXFnNUFXMzVCaHhJK0R5Ym00SWRRK244SzQ5dmZmClVsVnkvSXRNRmFKUmxiOFo1MDlQTGd1bnNqRkxZem5xZzBXLy9VK3J0N2hQT00wV0FsUm9xYmFKOWI5d2s1UjEKM0ZMTmVwNUM0eHF5aG1RaUIwcFpnbUtLTU5qZFVlU0xrK0dBTlZHZEpITG1nektPY3IwMEpSV0FCanhYb2VFVwoySTMwaWNEc1hlSGF3WGtDQXdFQUFhT0J2akNCdXpBT0JnTlZIUThCQWY4RUJBTUNCYUF3REFZRFZSMFRBUUgvCkJBSXdBREFmQmdOVkhTTUVHREFXZ0JSRzRxMzVxRUhQUU5hVmFrTjg0UVd5czNOWWtqQjZCZ05WSFJFQkFmOEUKY0RCdWdpaGlhV2RwY0MxcmRXSmxjbTVsZEdWekxXZGhkR1YzWVhrdWEzVmlaUzF6ZVhOMFpXMHVjM1pqZ2paaQphV2RwY0MxcmRXSmxjbTVsZEdWekxXZGhkR1YzWVhrdWEzVmlaUzF6ZVhOMFpXMHVjM1pqTG1Oc2RYTjBaWEl1CmJHOWpZV3lIQkg4QUFBR0hCQUFBQUFBd0NnWUlLb1pJemowRUF3SURSd0F3UkFJZ1JSQkd4aTh1ZFhqL0tDQkoKTVpLVHdvVTZFcVNldVVvSnFtMHN4MjNWc0tVQ0lBWEdSZFUwTzZHYzQ2R1pVQnV5eThMMnplY3ZuYm1aSlRUZQo5RFhhajN3SAotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+  tls.key: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBelg2YmRnZFk3RjhyODZCdng2cGhZUmh5UEdLYW5XREtvdEVXS3lwQkJtQWplaE10CkZTWnNXNHdvcXVSc25BUnN3NlhrVC9PcnNvMFIzQkZEb1FsUklNVVVzcFVtZDFxMzFjdm5nVENNbnBYYkNURlMKUFJWeVd2ZExMYWY0eEJISVlIVDdMOWpBcU8xeDh2bWM1Y0VWMS9ncXZtQ2g1Q09rdm1tMGh4amVnU3FEa0JiZgprR0hFajRQSnViZ2gxRDZmd3JqMjk5OVNWWEw4aTB3Vm9sR1Z2eG5uVDA4dUM2ZXlNVXRqT2VxRFJiLzlUNnUzCnVFODR6UllDVkdpcHRvbjF2M0NUbEhYY1VzMTZua0xqR3JLR1pDSUhTbG1DWW9vdzJOMVI1SXVUNFlBMVVaMGsKY3VhRE1vNXl2VFFsRllBR1BGZWg0UmJZamZTSndPeGQ0ZHJCZVFJREFRQUJBb0lCQUYwZEFWUjUvOUViVHM4Vgo0NUNWbzRwYmlXZlRSandKbjhnbTllU1pRTjJpc25DZVA4OVZtY1Bodm91dzlZVzhlNHdybjBpYklUSEd1bEQ5CmdhZDJrVXhJQVJqcWZJT1lsN1JJc0ozWllkNTZDTVloa3lJYWxiYWlWMjVZcm1BcHJxSUdYOHRPYS80Zm1ZSi8KbUppQzVXTDNFR2N6WWlmOS9xaEpQWVA1d05qRm1vMnYvbzYyV0dFOFhzaEFLVWJUQklsZHdFY09mYVJMRzlWbQpRLzlxeE00WHkreXpDY0FqcTQ4dEl1UXlUNVZLR0pGQW5Wak5Udnc1MlJ5djRQdW5pVkFuWERGSnNrM1Bvd2piCnlxaThPOWtwazJPaDdvaVBBT3BqQlJoZTkwSEhPTDRwMGVGLzNKcXptYWY5WVFqZkNWQlM0d1hlS3owc2FEOTEKY2pkUVFBRUNnWUVBOUpwL2xmOFJ1LzBGQTdDOW9nOTRmZ3hzTVhlS1lqU05pSVNuZU8yVzNId3prZVNyY1hwMApyZE9vMlh4MllPWXJ2VkdnTHB0VFNKN0hTanpTYWVsclYvOHdKT0NCa2RWLzFrSVIxM2FsZVFVTGZjWFVSMWg1ClJ2K05tTEJkYmtSV3ozaWhNTDZRYVRUNDFmWXhtSDJtS1V0dmsvMlJlN3p5N01mbWkvMzV1YlVDZ1lFQTF4R2oKVWRySm9LVVRMKzBnSkI5SjVWUlpZTVVyaEtmK1I1dVhKdDBuWUg3S2hlMzFlVjRNa2tXeXFIeTRHZ2d2Y053cwpQTUdVK1hwZWlRQldSUEYxdnUwU3p3ck16ODNXbWFxTDZXVVlVclJJWENtVCtIZFVKR044QVBlN1FPcjN5amNICjg1dGJGVmtINjIramt5ajBNR1VUditIYkFoa1VESmczQy95dmN6VUNnWUFReWJITUI2K2Q2V1c0dFI2dXlzVUkKVWEzelR6TU9QbkVnVjRwdkFFK0VYbm5qbjRBc3o2ekdhV3FEVXNtRktRY0RmV0N6RWpJTEgrcXBxN2I5VWVudQpKak9WdEZyd09Xa0d1WTRqN1o2NXlhRGFSd09reWV1NDliMHdKNXFpQU1xOGZwa0JrWEt6NWREV1RvbGszK3JSCmxyM1h1R1dOeXBBWnREYWNrUmZjcVFLQmdRQ0ViSTdVV3RQbGYxOFdGbnJBNHljYjl0amx0ZUg2MTNuQlc3TXgKTWVFS0VHZmhHVWtaaHVoVXRHZXlTTUVPL2xVL3Q4SGhVd3pJcENsTFVCTE9kcUthZ2QwZjhMVjFpbmVGdkxaVAphblVVajM4eWlFTmRMUlI1SjJ4MktCTjdnSEk4WjdBVXRtYlorU3pnTWFoVmQxVUw2MkRDdUcyaW1CQjVSTXc0CkxFbFh0UUtCZ0JhQzlDeHV5d2JDZ0dHNDBDTFl6QWN2Yktsb0hacSttYWEzalA0ZDVWamprRDlPMWl4MG0rZksKeHNaeDJxMjM3Rjk1Q2pYZzdPNlBEZzFLMVl5aFcxdUtuVW5nNXhtQjQvdG9iV1laVTNtZlZBTVE3bTFvNGZnbwoydysra3FUVkFObnZGZlVmcnpOWVgybDl3enVwc0x2L2ZNaFVRWitmcDM4MDVtajNlYWVOCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==
+
+---
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: validating-webhook-configuration
+webhooks:
+  - admissionReviewVersions:
+      - v1beta1
+      - v1
+    clientConfig:
+      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkekNDQVIyZ0F3SUJBZ0lSQUtkNWZCd1NzZ3Q0Ri95UWRyRUZMcW93Q2dZSUtvWkl6ajBFQXdJd0d6RVoKTUJjR0ExVUVBeE1RYlhrdGMyVnNabk5wWjI1bFpDMWpZVEFlRncweU16QXpNVGN3TkRVME16QmFGdzB5TXpBMgpNVFV3TkRVME16QmFNQnN4R1RBWEJnTlZCQU1URUcxNUxYTmxiR1p6YVdkdVpXUXRZMkV3V1RBVEJnY3Foa2pPClBRSUJCZ2dxaGtqT1BRTUJCd05DQUFRR2pCajFtQUhSMHJCSHpmOHh1UlAzT05MZVh2Um5vSTRkaGh0SklLSi8KemdSNU54OXdqNUtMUkovY1N3WHVWeVBua0o0T1YzM2kxYTJaKzlFVFZ4R3lvMEl3UURBT0JnTlZIUThCQWY4RQpCQU1DQXFRd0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVVJ1S3QrYWhCejBEV2xXcERmT0VGCnNyTnpXSkl3Q2dZSUtvWkl6ajBFQXdJRFNBQXdSUUloQVBqeWZ4dmg5VTVNY0MveDNQUHNvNlJZcHE1VFhadVgKWnYwbVJWMzNxUjQ0QWlBUGRzaFEzZDJQNitqRnNEVWJFRTA4b3p1WEZrTTY0YVVSbWVUTUVZREZqdz09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+      service:
+        name: bigip-kubernetes-gateway
+        namespace: kube-system
+        path: /validate-gateway-networking-k8s-io-v1beta1-gatewayclass
+        port: 9443
+      # url: "https://10.250.64.101:9443/validate-gateway-networking-k8s-io-v1beta1-gatewayclass"
+    failurePolicy: Fail
+    name: vgwc.kb.io
+    rules:
+      - apiGroups:
+          - gateway.networking.k8s.io
+        apiVersions:
+        - v1beta1
+        operations: ["*"]
+        resources:
+          - gatewayclasses
+    sideEffects: None
+
 ---
 
 apiVersion: v1
@@ -20,21 +62,8 @@ data:
   bigip-kubernetes-gateway-config: |
     - management:
         username: admin
-        ipAddress: 10.250.15.180
+        ipAddress: 10.250.2.219
         port: 443
-      flannel:
-        tunnels:
-          - name: fl-tunnel
-            profileName: fl-vxlan
-            port: 8472
-            localAddress: 10.250.18.119
-        selfIPs:
-          - name: flannel-self
-            ipMask: 10.42.20.1/16
-            tunnelName: fl-tunnel
-      # calico:
-      #   localAS: &as 64512
-      #   remoteAS: *as
 
 ---
 
@@ -61,13 +90,15 @@ spec:
       containers:
         # kubectl logs -f deployment/bigip-kubernetes-gateway -c bigip-kubernetes-gateway-pod -n kube-system
         - name: bigip-kubernetes-gateway-pod
-          image: f5devcentral/bigip-kubernetes-gateway:v0.1.0-20221226
+          # image: f5devcentral/bigip-kubernetes-gateway:v0.1.0-20221226
+          image: zongzw/bigip-kubernetes-gateway:latest-20230317-150818
           imagePullPolicy: IfNotPresent
           command: ["/bigip-kubernetes-gateway-controller-linux"]
           args: [
             "--controller-name=f5.io/gateway-controller-name",
             "--bigip-config-directory=/bigip-config",
             "--bigip-credential-directory=/bigip-credential",
+            "--certificate-directory=/tmp/k8s-webhook-server/serving-certs"
           ]
           volumeMounts:
             - name: bigip-credential
@@ -76,6 +107,9 @@ spec:
             - name: bigip-config
               mountPath: /bigip-config
               readOnly: true
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
       volumes:
         - name: bigip-credential
           secret:
@@ -83,14 +117,17 @@ spec:
         - name: bigip-config
           configMap:
             name: bigip-kubernetes-gateway-configmap
-
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: webhook-server-cert
 ---
 
 # expose the Prometheus port with NodePort
 apiVersion: v1
 kind: Service
 metadata:
-  name: bigip-kubernetes-gateway-svc
+  name: bigip-kubernetes-gateway
   namespace: kube-system
 spec:
   selector:
@@ -106,4 +143,9 @@ spec:
       port: 8081
       targetPort: 8081
       nodePort: 30081
+    - name: bigip-kubernetes-gateway-webhook
+      protocol: TCP
+      port: 9443
+      targetPort: 9443
+      nodePort: 30443
   type: NodePort

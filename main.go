@@ -44,6 +44,7 @@ import (
 
 	"gitee.com/zongzw/bigip-kubernetes-gateway/controllers"
 	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
+	"gitee.com/zongzw/bigip-kubernetes-gateway/webhooks"
 	f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
 	"github.com/zongzw/f5-bigip-rest/deployer"
 	"github.com/zongzw/f5-bigip-rest/utils"
@@ -74,6 +75,7 @@ func main() {
 		enableLeaderElection bool
 		probeAddr            string
 		credsDir             string
+		certDir              string
 		confDir              string
 		controllerName       string
 	)
@@ -86,6 +88,7 @@ func main() {
 
 	flag.StringVar(&credsDir, "bigip-credential-directory", "/bigip-credential", "Directory that contains the BIG-IP "+
 		"password file. To be used instead of bigip-password arguments.")
+	flag.StringVar(&certDir, "certificate-directory", "/certificate-directory", "Directory that contains tls.crt and tls.key for webook https server.")
 	flag.StringVar(&confDir, "bigip-config-directory", "/bigip-config", "Directory of bigip-k8s-gw-conf.yaml file.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
 	flag.StringVar(&level, "log-level", utils.LogLevel_Type_INFO, "The log level, valid values: trace, debug, info, warn, error")
@@ -136,6 +139,8 @@ func main() {
 	mgr.AddMetricsExtraHandler("/runtime/", dumpRuntimeHandler())
 
 	setupReconcilers(mgr)
+	setupWebhooks(mgr)
+
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
@@ -149,6 +154,7 @@ func main() {
 
 	defer close(stopCh)
 	setupLog.Info("starting manager")
+	mgr.GetWebhookServer().CertDir = certDir
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
@@ -231,12 +237,24 @@ func setupReconcilers(mgr manager.Manager) {
 		LogLevel: level,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "conntroller", "Secret")
+		os.Exit(1)
 	}
 
 	if err := controllers.SetupReconcilerForCoreV1WithManager(mgr, level); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Endpoints")
 		os.Exit(1)
 	}
+}
+
+func setupWebhooks(mgr manager.Manager) error {
+
+	if err := (&webhooks.GatewayClassWebhook{LogLevel: level}).
+		SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "gatewayclass")
+		os.Exit(1)
+	}
+
+	return nil
 }
 
 func setupBIGIPs(credsDir, confDir string) error {
