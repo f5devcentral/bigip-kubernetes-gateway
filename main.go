@@ -42,9 +42,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"gitee.com/zongzw/bigip-kubernetes-gateway/controllers"
-	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
-	"gitee.com/zongzw/bigip-kubernetes-gateway/webhooks"
+	"github.com/f5devcentral/bigip-kubernetes-gateway/controllers"
+	"github.com/f5devcentral/bigip-kubernetes-gateway/pkg"
+	"github.com/f5devcentral/bigip-kubernetes-gateway/webhooks"
 	f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
 	"github.com/zongzw/f5-bigip-rest/deployer"
 	"github.com/zongzw/f5-bigip-rest/utils"

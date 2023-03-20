@@ -1,4 +1,4 @@
-module gitee.com/zongzw/bigip-kubernetes-gateway
+module github.com/f5devcentral/bigip-kubernetes-gateway
 
 go 1.19
 
