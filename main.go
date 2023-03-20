@@ -112,6 +112,7 @@ func main() {
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
+		CertDir:                certDir,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "303cfed9.f5.com",
@@ -155,7 +156,6 @@ func main() {
 
 	defer close(stopCh)
 	setupLog.Info("starting manager")
-	mgr.GetWebhookServer().CertDir = certDir
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
