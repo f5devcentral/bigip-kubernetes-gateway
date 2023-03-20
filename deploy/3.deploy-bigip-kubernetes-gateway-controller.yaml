@@ -50,6 +50,72 @@ webhooks:
         resources:
           - gatewayclasses
     sideEffects: None
+  - admissionReviewVersions:
+      - v1beta1
+      - v1
+    clientConfig:
+      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkekNDQVIyZ0F3SUJBZ0lSQUtkNWZCd1NzZ3Q0Ri95UWRyRUZMcW93Q2dZSUtvWkl6ajBFQXdJd0d6RVoKTUJjR0ExVUVBeE1RYlhrdGMyVnNabk5wWjI1bFpDMWpZVEFlRncweU16QXpNVGN3TkRVME16QmFGdzB5TXpBMgpNVFV3TkRVME16QmFNQnN4R1RBWEJnTlZCQU1URUcxNUxYTmxiR1p6YVdkdVpXUXRZMkV3V1RBVEJnY3Foa2pPClBRSUJCZ2dxaGtqT1BRTUJCd05DQUFRR2pCajFtQUhSMHJCSHpmOHh1UlAzT05MZVh2Um5vSTRkaGh0SklLSi8KemdSNU54OXdqNUtMUkovY1N3WHVWeVBua0o0T1YzM2kxYTJaKzlFVFZ4R3lvMEl3UURBT0JnTlZIUThCQWY4RQpCQU1DQXFRd0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVVJ1S3QrYWhCejBEV2xXcERmT0VGCnNyTnpXSkl3Q2dZSUtvWkl6ajBFQXdJRFNBQXdSUUloQVBqeWZ4dmg5VTVNY0MveDNQUHNvNlJZcHE1VFhadVgKWnYwbVJWMzNxUjQ0QWlBUGRzaFEzZDJQNitqRnNEVWJFRTA4b3p1WEZrTTY0YVVSbWVUTUVZREZqdz09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+      service:
+        name: bigip-kubernetes-gateway
+        namespace: kube-system
+        path: /validate-gateway-networking-k8s-io-v1beta1-gateway
+        port: 9443
+      # url: "https://10.250.64.101:9443/validate-gateway-networking-k8s-io-v1beta1-gateway"
+    failurePolicy: Fail
+    name: vgw.kb.io
+    rules:
+      - apiGroups:
+          - gateway.networking.k8s.io
+        apiVersions:
+        - v1beta1
+        operations: ["*"]
+        resources:
+          - gateways
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1beta1
+      - v1
+    clientConfig:
+      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkekNDQVIyZ0F3SUJBZ0lSQUtkNWZCd1NzZ3Q0Ri95UWRyRUZMcW93Q2dZSUtvWkl6ajBFQXdJd0d6RVoKTUJjR0ExVUVBeE1RYlhrdGMyVnNabk5wWjI1bFpDMWpZVEFlRncweU16QXpNVGN3TkRVME16QmFGdzB5TXpBMgpNVFV3TkRVME16QmFNQnN4R1RBWEJnTlZCQU1URUcxNUxYTmxiR1p6YVdkdVpXUXRZMkV3V1RBVEJnY3Foa2pPClBRSUJCZ2dxaGtqT1BRTUJCd05DQUFRR2pCajFtQUhSMHJCSHpmOHh1UlAzT05MZVh2Um5vSTRkaGh0SklLSi8KemdSNU54OXdqNUtMUkovY1N3WHVWeVBua0o0T1YzM2kxYTJaKzlFVFZ4R3lvMEl3UURBT0JnTlZIUThCQWY4RQpCQU1DQXFRd0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVVJ1S3QrYWhCejBEV2xXcERmT0VGCnNyTnpXSkl3Q2dZSUtvWkl6ajBFQXdJRFNBQXdSUUloQVBqeWZ4dmg5VTVNY0MveDNQUHNvNlJZcHE1VFhadVgKWnYwbVJWMzNxUjQ0QWlBUGRzaFEzZDJQNitqRnNEVWJFRTA4b3p1WEZrTTY0YVVSbWVUTUVZREZqdz09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+      service:
+        name: bigip-kubernetes-gateway
+        namespace: kube-system
+        path: /validate-gateway-networking-k8s-io-v1beta1-httproute
+        port: 9443
+      # url: "https://10.250.64.101:9443/validate-gateway-networking-k8s-io-v1beta1-httproute"
+    failurePolicy: Fail
+    name: vhr.kb.io
+    rules:
+      - apiGroups:
+          - gateway.networking.k8s.io
+        apiVersions:
+        - v1beta1
+        operations: ["*"]
+        resources:
+          - httproutes
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1beta1
+      - v1
+    clientConfig:
+      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkekNDQVIyZ0F3SUJBZ0lSQUtkNWZCd1NzZ3Q0Ri95UWRyRUZMcW93Q2dZSUtvWkl6ajBFQXdJd0d6RVoKTUJjR0ExVUVBeE1RYlhrdGMyVnNabk5wWjI1bFpDMWpZVEFlRncweU16QXpNVGN3TkRVME16QmFGdzB5TXpBMgpNVFV3TkRVME16QmFNQnN4R1RBWEJnTlZCQU1URUcxNUxYTmxiR1p6YVdkdVpXUXRZMkV3V1RBVEJnY3Foa2pPClBRSUJCZ2dxaGtqT1BRTUJCd05DQUFRR2pCajFtQUhSMHJCSHpmOHh1UlAzT05MZVh2Um5vSTRkaGh0SklLSi8KemdSNU54OXdqNUtMUkovY1N3WHVWeVBua0o0T1YzM2kxYTJaKzlFVFZ4R3lvMEl3UURBT0JnTlZIUThCQWY4RQpCQU1DQXFRd0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVVJ1S3QrYWhCejBEV2xXcERmT0VGCnNyTnpXSkl3Q2dZSUtvWkl6ajBFQXdJRFNBQXdSUUloQVBqeWZ4dmg5VTVNY0MveDNQUHNvNlJZcHE1VFhadVgKWnYwbVJWMzNxUjQ0QWlBUGRzaFEzZDJQNitqRnNEVWJFRTA4b3p1WEZrTTY0YVVSbWVUTUVZREZqdz09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+      service:
+        name: bigip-kubernetes-gateway
+        namespace: kube-system
+        path: /validate-gateway-networking-k8s-io-v1beta1-referencegrant
+        port: 9443
+      # url: "https://10.250.64.101:9443/validate-gateway-networking-k8s-io-v1beta1-referencegrant"
+    failurePolicy: Fail
+    name: vrg.kb.io
+    rules:
+      - apiGroups:
+          - gateway.networking.k8s.io
+        apiVersions:
+        - v1beta1
+        operations: ["*"]
+        resources:
+          - referencegrants
+    sideEffects: None
 
 ---
 
