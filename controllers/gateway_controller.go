@@ -28,7 +28,7 @@ import (
 
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
+	"github.com/f5devcentral/bigip-kubernetes-gateway/pkg"
 	"github.com/zongzw/f5-bigip-rest/deployer"
 	"github.com/zongzw/f5-bigip-rest/utils"
 )

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"gitee.com/zongzw/bigip-kubernetes-gateway/pkg"
+	"github.com/f5devcentral/bigip-kubernetes-gateway/pkg"
 	"github.com/google/uuid"
 	"github.com/zongzw/f5-bigip-rest/deployer"
 	"github.com/zongzw/f5-bigip-rest/utils"
