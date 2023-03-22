@@ -1,0 +1,5 @@
+kubeConfig: /Users/zong/.kube/config
+bigipConfig:
+  ipAddress: 10.250.2.219
+  port: 443
+  password: P@ssw0rd123
