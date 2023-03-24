@@ -112,6 +112,7 @@ func main() {
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
+		CertDir:                certDir,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "303cfed9.f5.com",
@@ -155,7 +156,6 @@ func main() {
 
 	defer close(stopCh)
 	setupLog.Info("starting manager")
-	mgr.GetWebhookServer().CertDir = certDir
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
@@ -247,30 +247,34 @@ func setupReconcilers(mgr manager.Manager) {
 	}
 }
 
-func setupWebhooks(mgr manager.Manager) error {
+func setupWebhooks(mgr manager.Manager) {
 	slog := utils.NewLog().WithLevel(level).WithRequestID(uuid.NewString())
+
 	if err := (&webhooks.GatewayClassWebhook{Logger: slog}).
 		SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "gatewayclass")
 		os.Exit(1)
 	}
-	if err := (&webhooks.GatewayWebhook{Logger: slog}).
-		SetupWebhookWithManager(mgr); err != nil {
+
+	if err := (&webhooks.GatewayWebhook{
+		Logger: slog,
+		Cache:  mgr.GetCache(),
+	}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "gateway")
 		os.Exit(1)
 	}
+
 	if err := (&webhooks.HTTPRouteWebhook{Logger: slog}).
 		SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "httproute")
 		os.Exit(1)
 	}
+
 	if err := (&webhooks.ReferenceGrantWebhook{Logger: slog}).
 		SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "referencegrant")
 		os.Exit(1)
 	}
-
-	return nil
 }
 
 func setupBIGIPs(credsDir, confDir string) error {
