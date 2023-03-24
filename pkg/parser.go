@@ -162,7 +162,7 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 				irules[vsname] = []string{}
 			}
 			routetype := reflect.TypeOf(*hr).Name()
-			if routeMatches(ns, listeners[vsname], ActiveSIGs.GetNamespace(hr.Namespace), routetype) {
+			if RouteMatches(ns, listeners[vsname], ActiveSIGs.GetNamespace(hr.Namespace), routetype) {
 				irules[vsname] = append(irules[vsname], hrName(hr))
 			}
 		}

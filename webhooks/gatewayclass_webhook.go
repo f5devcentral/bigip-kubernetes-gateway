@@ -2,10 +2,7 @@ package webhooks
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
-	"github.com/f5devcentral/bigip-kubernetes-gateway/pkg"
 	"github.com/zongzw/f5-bigip-rest/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -17,32 +14,22 @@ type GatewayClassWebhook struct {
 }
 
 func (wh *GatewayClassWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) error {
-	gwc := obj.(*gatewayv1beta1.GatewayClass)
-	nsn := utils.Keyname(gwc.Namespace, gwc.Name)
-	wh.Logger.Infof("validating create for gatewayclass:%s", nsn)
 	return nil
 }
 
 func (wh *GatewayClassWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) error {
-	ngwc := newObj.(*gatewayv1beta1.GatewayClass)
-	nsn := utils.Keyname(ngwc.Namespace, ngwc.Name)
-	wh.Logger.Infof("validating update for gatewayclass:%s", nsn)
+	// update .Spec.ControllerName is not allowed, it will be checked by
+	// 	admission webhook "validate.gateway.networking.k8s.io":
+	// denied the request: spec.controllerName: Invalid value: "f5.io/gateway-controller-name": cannot update an immutable field
 	return nil
 }
 
 func (wh *GatewayClassWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) error {
-	gwc := obj.(*gatewayv1beta1.GatewayClass)
-	nsn := utils.Keyname(gwc.Namespace, gwc.Name)
-	wh.Logger.Infof("validating delete for gatewayclass:%s", nsn)
-	if gws := pkg.ActiveSIGs.AttachedGateways(gwc); len(gws) != 0 {
-		names := []string{}
-		for _, gw := range gws {
-			names = append(names, utils.Keyname(gw.Namespace, gw.Name))
-		}
-		return fmt.Errorf("gatewayclass %s cannot be deleted, gateways [%s] are still referring to it", gwc.Name, strings.Join(names, ", "))
-	} else {
+	if !validateMap[VK_gateway_gatewayClassName] {
 		return nil
 	}
+	gwc := obj.(*gatewayv1beta1.GatewayClass)
+	return validateGatewayClassIsReferred(gwc)
 }
 
 func (wh *GatewayClassWebhook) SetupWebhookWithManager(mgr ctrl.Manager) error {

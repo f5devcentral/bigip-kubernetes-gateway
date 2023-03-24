@@ -79,6 +79,7 @@ func main() {
 		certDir              string
 		confDir              string
 		controllerName       string
+		validates            string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -93,12 +94,21 @@ func main() {
 	flag.StringVar(&confDir, "bigip-config-directory", "/bigip-config", "Directory of bigip-k8s-gw-conf.yaml file.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
 	flag.StringVar(&level, "log-level", utils.LogLevel_Type_INFO, "The log level, valid values: trace, debug, info, warn, error")
+	flag.StringVar(&validates, "validates", "", fmt.Sprintf("The items to validate synchronizingly, on operations "+
+		"concating multiple values with ',', valid values: %s", strings.Join(webhooks.SupportedValidatingKeys(), ",")))
 
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	if err := webhooks.ValidateGivenKeys(strings.Split(validates, ",")); err != nil {
+		setupLog.Error(err, "--validates fault")
+		os.Exit(1)
+	} else {
+		webhooks.TurnOnValidatingFor(strings.Split(validates, ","))
+	}
 
 	pkg.ActiveSIGs.ControllerName = controllerName
 	if err := setupBIGIPs(credsDir, confDir); err != nil {
@@ -258,7 +268,6 @@ func setupWebhooks(mgr manager.Manager) {
 
 	if err := (&webhooks.GatewayWebhook{
 		Logger: slog,
-		Cache:  mgr.GetCache(),
 	}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "gateway")
 		os.Exit(1)
