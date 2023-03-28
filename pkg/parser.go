@@ -14,7 +14,8 @@ import (
 func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
-	if ActiveSIGs.GetGatewayClass(className) == nil {
+	if gwc := ActiveSIGs.GetGatewayClass(className); gwc == nil ||
+		gwc.Spec.ControllerName != gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
 		return map[string]interface{}{}, nil
 	}
 
