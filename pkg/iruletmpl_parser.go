@@ -193,7 +193,7 @@ func parsePoolweight(backends []gatewayv1beta1.HTTPBackendRef, hr *gatewayv1beta
 			ns = string(*br.Namespace)
 		}
 		svc := ActiveSIGs.GetService(utils.Keyname(ns, string(br.Name)))
-		if svc == nil || !ActiveSIGs.CanRefer(hr, svc) {
+		if svc != nil && !ActiveSIGs.CanRefer(hr, svc) {
 			continue
 		}
 		pn := strings.Join([]string{ns, string(br.Name)}, ".")
