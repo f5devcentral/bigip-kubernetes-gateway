@@ -31,13 +31,18 @@ func gwListenerName(gw *gatewayv1beta1.Gateway, ls *gatewayv1beta1.Listener) str
 	return strings.Join([]string{"gw", gw.Namespace, gw.Name, string(ls.Name)}, ".")
 }
 
-func routeMatches(gwNamespace string, listener *gatewayv1beta1.Listener, routeNamespace *v1.Namespace, routeType string) bool {
+func RouteMatches(gwNamespace string, listener *gatewayv1beta1.Listener, routeNamespace *v1.Namespace, routeType string) bool {
 	// actually, "listener" may be nil, but ".AllowedRoutes.Namespaces.From" will never be nil
 	if listener == nil || listener.AllowedRoutes == nil {
 		return false
 	}
 	namespaces := listener.AllowedRoutes.Namespaces
 	if namespaces == nil || namespaces.From == nil {
+		return false
+	}
+
+	if routeNamespace == nil {
+		// should never happen, for tests only
 		return false
 	}
 

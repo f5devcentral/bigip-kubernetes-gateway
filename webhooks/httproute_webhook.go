@@ -14,11 +14,29 @@ type HTTPRouteWebhook struct {
 }
 
 func (wh *HTTPRouteWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) error {
-	return nil
+	var err1, err2 error = nil, nil
+	hr := obj.(*gatewayv1beta1.HTTPRoute)
+
+	if validateMap[VK_httproute_parentRefs] {
+		err1 = validateHTTPRouteParentRefs(hr)
+	}
+	if validateMap[VK_httproute_rules_backendRefs] {
+		err2 = validateHTTPRouteBackendRefs(hr)
+	}
+	return utils.MergeErrors([]error{err1, err2})
 }
 
 func (wh *HTTPRouteWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) error {
-	return nil
+	var err1, err2 error = nil, nil
+	hr := newObj.(*gatewayv1beta1.HTTPRoute)
+
+	if validateMap[VK_httproute_parentRefs] {
+		err1 = validateHTTPRouteParentRefs(hr)
+	}
+	if validateMap[VK_httproute_rules_backendRefs] {
+		err2 = validateHTTPRouteBackendRefs(hr)
+	}
+	return utils.MergeErrors([]error{err1, err2})
 }
 
 func (wh *HTTPRouteWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) error {

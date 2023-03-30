@@ -223,13 +223,13 @@ func (c *SIGCache) UnsetReferenceGrant(keyname string) {
 	}
 }
 
-func (c *SIGCache) AttachedGateways(gtw *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) AttachedGateways(gwc *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	return c._attachedGateways(gtw)
+	return c._attachedGateways(gwc)
 }
 
 func (c *SIGCache) _attachedGateways(gwc *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
@@ -272,7 +272,7 @@ func (c *SIGCache) _gatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta
 					continue
 				}
 				routetype := reflect.TypeOf(*hr).Name()
-				if routeMatches(gw.Namespace, &listener, ActiveSIGs.Namespace[hr.Namespace], routetype) {
+				if RouteMatches(gw.Namespace, &listener, c.Namespace[hr.Namespace], routetype) {
 					gws = append(gws, gw)
 					break
 				}
@@ -298,16 +298,13 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 	}
 
 	listeners := map[string]*gatewayv1beta1.Listener{}
-	// &listener, the local variable, will point to the latest listener
-	// it can be used but cannot be taken way.
-	// for _, listener := range gw.Spec.Listeners {  wrong!
-	for i := range gw.Spec.Listeners {
-		vsname := gwListenerName(gw, &gw.Spec.Listeners[i])
-		listeners[vsname] = &gw.Spec.Listeners[i]
+	for _, ls := range gw.Spec.Listeners {
+		lskey := gwListenerName(gw, &ls)
+		listeners[lskey] = ls.DeepCopy()
 	}
 
 	hrs := []*gatewayv1beta1.HTTPRoute{}
-	for _, hr := range ActiveSIGs.HTTPRoute {
+	for _, hr := range c.HTTPRoute {
 		for _, pr := range hr.Spec.ParentRefs {
 			ns := hr.Namespace
 			if pr.Namespace != nil {
@@ -315,9 +312,9 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 			}
 			if utils.Keyname(ns, string(pr.Name)) == utils.Keyname(gw.Namespace, gw.Name) {
 				vsname := hrParentName(hr, &pr)
-				routeNamespace := ActiveSIGs.Namespace[hr.Namespace]
+				routeNamespace := c.Namespace[hr.Namespace]
 				routetype := reflect.TypeOf(*hr).Name()
-				if routeMatches(gw.Namespace, listeners[vsname], routeNamespace, routetype) {
+				if RouteMatches(gw.Namespace, listeners[vsname], routeNamespace, routetype) {
 					hrs = append(hrs, hr)
 					break
 				}
@@ -388,6 +385,19 @@ func (c *SIGCache) AllAttachedServiceKeys() []string {
 		rlt = append(rlt, utils.Keyname(svc.Namespace, svc.Name))
 	}
 	return rlt
+}
+
+func (c *SIGCache) AllHTTPRoutes() []*gatewayv1beta1.HTTPRoute {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	hrs := []*gatewayv1beta1.HTTPRoute{}
+	for _, hr := range c.HTTPRoute {
+		hrs = append(hrs, hr)
+	}
+	return hrs
 }
 
 func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
@@ -643,7 +653,7 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 		return err
 	} else {
 		for _, gwc := range gwcList.Items {
-			if gwc.Spec.ControllerName == gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
+			if gwc.Spec.ControllerName == gatewayv1beta1.GatewayController(c.ControllerName) {
 				slog.Debugf("found gatewayclass %s", gwc.Name)
 				c.GatewayClass[gwc.Name] = gwc.DeepCopy()
 			} else {
