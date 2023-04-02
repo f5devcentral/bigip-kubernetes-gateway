@@ -16,7 +16,7 @@ image_build: binary_build
 		-f build/Dockerfile .
 
 binary_build:
-	cd ..; \
+	cd ../cmd/gateway; \
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 	go build -ldflags '-s -w --extldflags "-static -fpic"' -o bigip-kubernetes-gateway-controller-linux; \
 	# CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 \

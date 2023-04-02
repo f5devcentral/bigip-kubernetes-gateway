@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/f5devcentral/bigip-kubernetes-gateway/pkg"
+	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
 

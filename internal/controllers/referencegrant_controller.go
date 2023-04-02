@@ -20,7 +20,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/f5devcentral/bigip-kubernetes-gateway/pkg"
+	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/google/uuid"
 	"github.com/zongzw/f5-bigip-rest/utils"
 	"k8s.io/apimachinery/pkg/runtime"

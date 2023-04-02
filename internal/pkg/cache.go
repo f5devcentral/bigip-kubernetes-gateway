@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/f5devcentral/bigip-kubernetes-gateway/k8s"
+	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/k8s"
 	"github.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
