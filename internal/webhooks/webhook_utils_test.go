@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/f5devcentral/bigip-kubernetes-gateway/pkg"
+	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/zongzw/f5-bigip-rest/utils"
