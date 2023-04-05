@@ -6,7 +6,7 @@ In this example, we deploy a simple `Gateway` and relavent resources: `GatewayCl
 
 As the start, please follow the instruction for BIG-IP Kubernetes GatewayAPI Controller installation/deployment.
 
-### 1. Deploy the `Service` and its `ReferenceGrant`
+### 1. Deploy the `Service`
 
 ```shell
 $ kubectl apply -f service.yaml
@@ -93,6 +93,9 @@ From the response json-format body, we can see the request information, like *se
 
 On BIG-IP, the gateway functionality is delivered with *Virtual* *iRule* and *Pool*:
 
+*The following resources can be retrieved via iControl Rest:*
+
+*`curl -k -u admin:xxx https://<BIG-IP>/mgmt/tm/ltm/<resource_type>`*
 ```json
 {
     "kind": "tm:ltm:virtual:virtualstate",
@@ -144,8 +147,9 @@ On BIG-IP, the gateway functionality is delivered with *Virtual* *iRule* and *Po
     "apiAnonymous": "..."
 }
 
-content of "apiAnonymous":
-
+```
+The content of "apiAnonymous" is:
+```
     when RULE_INIT {
         array unset weights *
         array unset static::pools_0 *
@@ -178,5 +182,6 @@ content of "apiAnonymous":
 
     when HTTP_RESPONSE {
     }
-
 ```
+
+In the HTTP_REQUEST event, according to the .spec in `HTTPRoute`, we match the host, url and other conditions if needed for the traffic before forwarding it to the backend pool.
