@@ -31,7 +31,3 @@ spec:
         - namespace: default
           name: test-service
           port: 80
-    - backendRefs:
-        - namespace: default
-          name: dev-service
-          port: 80
