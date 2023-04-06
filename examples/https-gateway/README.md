@@ -10,6 +10,8 @@
 
  In *secret.yaml* file, we provide a `Secret` with the tls cert and key. You may need to replace them with your owns.
 
+ A recommended way to generate the `Secret` is [cert-manager.io](https://gateway-api.sigs.k8s.io/implementations/?h=cert+manager#cert-manager).
+
  ### 1. Create the `Secret`
 
  ```shell

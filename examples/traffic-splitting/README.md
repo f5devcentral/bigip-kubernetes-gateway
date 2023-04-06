@@ -129,4 +129,8 @@ when HTTP_RESPONSE {
 
 ```
 
-According to specifications in `HTTPRoute`, we calculate the percentage of traffic, and forward traffic to different backends. 
+According to specifications in `HTTPRoute`, we calculate the percentage of traffic, and forward traffic to different backends. The line hosts the traffic devision is:
+
+```c
+array set weights { /cis-c-tenant/default.coffee 1 /cis-c-tenant/default.tea 9 }
+```
