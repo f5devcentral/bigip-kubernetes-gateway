@@ -3,19 +3,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: test-service
+  name: dev-service
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: test-service
+      app: dev-service
   template:
     metadata:
       labels:
-        app: test-service
+        app: dev-service
     spec:
       containers:
-        - name: test-service
+        - name: dev-service
           image: nginx:latest
           ports:
             - containerPort: 80
@@ -36,7 +36,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: test-service
+  name: dev-service
 spec:
   type: ClusterIP
   ports:
@@ -45,7 +45,7 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: test-service
+    app: dev-service
 
 ---
 
@@ -92,3 +92,53 @@ data:
     }
 
     export default {hello};
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-service
+  template:
+    metadata:
+      labels:
+        app: test-service
+    spec:
+      containers:
+        - name: test-service
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: config-volume
+              mountPath: /etc/nginx/njs/dumps.js
+              subPath: dumps.js
+      volumes:
+        - name: config-volume
+          configMap:
+            name: nginx-config-test
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: test-service
+
