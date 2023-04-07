@@ -1,0 +1,37 @@
+
+---
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: abcd
+  labels:
+    resource.zone: allowed-namespaces
+
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: myroute
+  namespace: abcd
+spec:
+  parentRefs:
+    - name: mygateway
+      sectionName: listenerx
+      namespace: default
+  hostnames:
+    - gateway.api
+  rules:
+    - matches:
+      - path:
+          type: PathPrefix
+          value: /path-test
+      backendRefs:
+        - namespace: default
+          name: test-service
+          port: 80
+    - backendRefs:
+        - namespace: default
+          name: dev-service
+          port: 80

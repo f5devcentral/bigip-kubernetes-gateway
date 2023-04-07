@@ -1,0 +1,144 @@
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dev-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dev-service
+  template:
+    metadata:
+      labels:
+        app: dev-service
+    spec:
+      containers:
+        - name: dev-service
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: config-volume
+              mountPath: /etc/nginx/njs/dumps.js
+              subPath: dumps.js
+      volumes:
+        - name: config-volume
+          configMap:
+            name: nginx-config-test
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: dev-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: dev-service
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config-test
+data:
+  nginx.conf: |
+    user  nginx;
+    worker_processes  1;
+
+    load_module modules/ngx_http_js_module.so;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        js_import njs/dumps.js;
+        server {
+            listen       80;
+            server_name  localhost;
+
+            location / {
+                js_content dumps.hello;
+            }
+        }
+    }
+  dumps.js: |
+    function hello(r) {
+        let d = {
+            'queries': r.args,
+            'headers': r.headersIn,
+            'version': r.httpVersion,
+            'method': r.method,
+            'remote-address': r.remoteAddress,
+            'body': r.requestText,
+            'uri': r.uri,
+            'server_name': process.env['HOSTNAME']
+        }
+
+        r.return(200, JSON.stringify(d)+"\n");
+    }
+
+    export default {hello};
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-service
+  template:
+    metadata:
+      labels:
+        app: test-service
+    spec:
+      containers:
+        - name: test-service
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: config-volume
+              mountPath: /etc/nginx/njs/dumps.js
+              subPath: dumps.js
+      volumes:
+        - name: config-volume
+          configMap:
+            name: nginx-config-test
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: test-service
+
