@@ -19,15 +19,13 @@ When '--validates' is used at controller starts, the controller will check the r
 
   * If the `Gateway` doesn't exist, `HTTPRoute` upsert(update & insert) request would be denied.
   * If there are still `HTTPRoute`s referring to `Gateway`, the `Gateway`'s deletion request would be denied.
-  * 
+
 
 * *httproute.rules.backendRefs*
 
   When this option is appended, the reference between `HTTPRoute` and `Service` would be checked.
 
-  If there are no `Service` existing, `HTTPRoute` upsert request would be denied.
-
-  If there 
+  * If there are no `Service` existing, `HTTPRoute` upsert request would be denied.
 
 * *gateway.gatewayClassName*
 
