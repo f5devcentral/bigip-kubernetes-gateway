@@ -1,5 +1,5 @@
-kubeConfig: /Users/zong/.kube/config
+kubeConfig: <replace with your kubeconfig file>
 bigipConfig:
-  ipAddress: 10.250.2.219
-  port: 443
-  password: P@ssw0rd123
+  ipAddress: <replace with your BigIP management IP>
+  port: <replace with your BigIP management Port>
+  password: <replace with your BigIP admin Password>
