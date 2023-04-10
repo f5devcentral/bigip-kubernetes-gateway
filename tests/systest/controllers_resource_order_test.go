@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Controllers random resource list", Ordered, func() {
+var _ = Describe("Controllers random resource list", func() {
 
 	BeforeEach(func() {
 		yamls := []string{
