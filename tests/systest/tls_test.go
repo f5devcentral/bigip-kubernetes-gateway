@@ -22,12 +22,13 @@ var yamlTLSTpl embed.FS
 
 var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 	const (
+		tlsGatewayClassName = "bigip-tls"
+		partition
 		tlsSecretName  = "tls-basic"
 		tlsGatewayName = "tls-gateway"
 		ipAddress      = "192.168.10.123"
 	)
 	var ca, caPrivKey, serverCert, serverPrivKey []byte
-	var partition string
 
 	BeforeAll(func() {
 		var err error
@@ -53,14 +54,8 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 		By("Verify server certificate with CA key")
 		Expect(helpers.VerifyServerWithCA(ca, serverCert)).To(Succeed())
 
-		gatewayclass, ok := dataBasics["gatewayclass"].(map[string]interface{})
-		Expect(ok).To(BeTrue())
-		partition, ok = gatewayclass["name"].(string)
-		Expect(ok).To(BeTrue())
-
+		// TODO: add Service Endpoints
 	})
-
-	// TODO: add its own gatewayclass, service etc
 
 	Describe("Create TLS type Secret on K8S", func() {
 		It("Build TLS template, Create TLS secret resource", func() {
@@ -81,6 +76,27 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 		})
 	})
 
+	Describe("Create GatewayClass for following test", func() {
+		It("Build TLS GatewayClass template, Create GatewayClass resource", func() {
+			Expect(k8sResource(
+				"templates/tls/gatewayclass.yaml",
+				map[string]interface{}{
+					"name": tlsGatewayClassName,
+				},
+				k8s.Apply,
+			)).To(Succeed())
+		})
+	})
+
+	When("GatewayClass have been created on K8S", func() {
+		It("Check partition has been created on BigIP", func() {
+			kind := "auth/partition/" + partition
+			Eventually(checkExist).WithContext(ctx).WithArguments(kind, "", "", "", bip.Exist).
+				WithTimeout(time.Second * 10).ProbeEvery(time.Millisecond * 500).
+				Should(BeTrue())
+		})
+	})
+
 	Describe("Create TLS Gateway on K8S", func() {
 		It("Build TLS Gateway template, Create Gateway resource", func() {
 			Expect(k8sResource(
@@ -88,7 +104,7 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 				map[string]interface{}{
 					"name":             tlsGatewayName,
 					"tlsName":          tlsSecretName,
-					"gatewayclassName": partition,
+					"gatewayclassName": tlsGatewayClassName,
 					"ipAddress":        ipAddress,
 				},
 				k8s.Apply,
@@ -96,8 +112,8 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 		})
 	})
 
-	When("Both TLS secret and TLS Virtual Server (TLS Gateway) have been created on BigIP", func() {
-		It("Check ssl-cert existed", func() {
+	When("Both TLS Secret and TLS Gateway have been created on K8S", func() {
+		It("Check ssl-cert has been created on BigIP", func() {
 			kind, partition, subfolder := "sys/file/ssl-cert", partition, ""
 			name := fmt.Sprintf("default_%s.crt", tlsSecretName)
 			Eventually(checkExist).WithContext(ctx).WithArguments(kind, name, partition, subfolder, bip.Exist).
@@ -105,7 +121,7 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 				Should(BeTrue())
 		})
 
-		It("Check virtual server is existed", func() {
+		It("Check virtual server has been created on BigIP", func() {
 			kind, partition, subfolder := "ltm/virtual", partition, ""
 			name := fmt.Sprintf("gw.default.%s.https", tlsGatewayName)
 			Eventually(checkExist).WithContext(ctx).WithArguments(kind, name, partition, subfolder, bip.Exist).
@@ -114,18 +130,16 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 		})
 	})
 
+	// TODO: add HTTPROUTE
+
 	Describe("Delete TLS Gateway from K8S", func() {
 		It("Delete TLS Gateway 'tls-gateway' from K8S", func() {
-			gatewayclass, ok := dataBasics["gatewayclass"].(map[string]interface{})
-			Expect(ok).To(BeTrue())
-			Expect(serverCert).NotTo(BeNil())
-
 			Expect(k8sResource(
 				"templates/tls/gateway.yaml",
 				map[string]interface{}{
 					"name":             tlsGatewayName,
 					"tlsName":          tlsSecretName,
-					"gatewayclassName": gatewayclass["name"],
+					"gatewayclassName": tlsGatewayClassName,
 					"ipAddress":        ipAddress,
 				},
 				k8s.Delete,
@@ -133,8 +147,8 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 		})
 	})
 
-	When("TLS Virtual Server (TLS Gateway) has been deleted from BigIP", func() {
-		It("Check virtual server is not existed", func() {
+	When("TLS Gateway has been deleted from K8S", func() {
+		It("Check virtual server has been deleted from BigIP", func() {
 			kind, partition, subfolder := "ltm/virtual", partition, ""
 			name := fmt.Sprintf("gw.default.%s.https", tlsGatewayName)
 			Eventually(checkExist).WithContext(ctx).WithArguments(kind, name, partition, subfolder, bip.Exist).
@@ -142,7 +156,7 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 				Should(BeFalse())
 		})
 
-		It("Check ssl-cert is not existed", func() {
+		It("Check ssl-cert has been deleted from BigIP", func() {
 			kind, partition, subfolder := "sys/file/ssl-cert", partition, ""
 			name := fmt.Sprintf("default_%s.crt", tlsSecretName)
 			Eventually(checkExist).WithContext(ctx).WithArguments(kind, name, partition, subfolder, bip.Exist).
@@ -151,8 +165,8 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 		})
 	})
 
-	Describe("Delete TLS seceret from K8S", func() {
-		It("Delete TLS seceret 'tls-basic' from K8s", func() {
+	Describe("Delete TLS Secret from K8S", func() {
+		It("Delete TLS Seceret 'tls-basic' from K8s", func() {
 			crt := base64.StdEncoding.EncodeToString(serverCert)
 			Expect(crt).NotTo(BeNil())
 			key := base64.StdEncoding.EncodeToString(serverPrivKey)
@@ -169,6 +183,28 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 			)).To(Succeed())
 		})
 	})
+
+	Describe("Delete GatewayClass from K8S", func() {
+		It("Delete TLS GatewayClass bigip-tls from K8S", func() {
+			Expect(k8sResource(
+				"templates/tls/gatewayclass.yaml",
+				map[string]interface{}{
+					"name": tlsGatewayClassName,
+				},
+				k8s.Delete,
+			)).To(Succeed())
+		})
+	})
+
+	When("Gatewayclass have been deleted on K8S", func() {
+		It("Check partition has been deleted on BigIP", func() {
+			kind := "auth/partition/" + partition
+			Eventually(checkExist).WithContext(ctx).WithArguments(kind, "", "", "", bip.Exist).
+				WithTimeout(time.Second * 10).ProbeEvery(time.Millisecond * 500).
+				Should(BeFalse())
+		})
+	})
+
 })
 
 func k8sResource(yaml string, data map[string]interface{}, action k8sAction) error {
