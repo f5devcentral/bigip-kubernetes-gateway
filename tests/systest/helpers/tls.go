@@ -36,10 +36,32 @@ var default_ca = &x509.Certificate{
 	BasicConstraintsValid: true,
 }
 
+func sign(crt, ca *x509.Certificate, caPrivKey *rsa.PrivateKey) ([]byte, []byte, error) {
+
+	rawCrtBytes, err := x509.CreateCertificate(rand.Reader, crt, ca, &caPrivKey.PublicKey, caPrivKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	crtPem := &bytes.Buffer{}
+	if err = pem.Encode(crtPem, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: rawCrtBytes,
+	}); err != nil {
+		return nil, nil, err
+	}
+	crtPrivKeyPem := &bytes.Buffer{}
+	if err = pem.Encode(crtPrivKeyPem, &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
+	}); err != nil {
+		return nil, nil, err
+	}
+
+	return crtPem.Bytes(), crtPrivKeyPem.Bytes(), nil
+}
+
 func GenerateCA(ca *x509.Certificate) (CAPEM, CAPrivateKey, error) {
-
-	var err error
-
 	if ca == nil {
 		ca = default_ca
 	}
@@ -48,27 +70,8 @@ func GenerateCA(ca *x509.Certificate) (CAPEM, CAPrivateKey, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	rawCaBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &rawPrivKey.PublicKey, rawPrivKey)
-	if err != nil {
-		return nil, nil, err
-	}
 
-	caPem := &bytes.Buffer{}
-	if err = pem.Encode(caPem, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: rawCaBytes,
-	}); err != nil {
-		return nil, nil, err
-	}
-	caPrivKeyPem := &bytes.Buffer{}
-	if err = pem.Encode(caPrivKeyPem, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(rawPrivKey),
-	}); err != nil {
-		return nil, nil, err
-	}
-
-	return caPem.Bytes(), caPrivKeyPem.Bytes(), nil
+	return sign(ca, ca, rawPrivKey)
 }
 
 var default_cert = &x509.Certificate{
@@ -104,7 +107,6 @@ func GenerateServerCert(serverCert *x509.Certificate, caPem CAPEM, caPrivKeyPem 
 	if caPrivKeyBlock == nil {
 		return nil, nil, fmt.Errorf("can not decode CA Private Key")
 	}
-
 	caPrivKey, err := x509.ParsePKCS1PrivateKey(caPrivKeyBlock.Bytes)
 	if err != nil {
 		return nil, nil, err
@@ -113,32 +115,8 @@ func GenerateServerCert(serverCert *x509.Certificate, caPem CAPEM, caPrivKeyPem 
 	if serverCert == nil {
 		serverCert = default_cert
 	}
-	rawServerPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		return nil, nil, err
-	}
 
-	rawServerCert, err := x509.CreateCertificate(rand.Reader, serverCert, ca, &rawServerPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	serverCertPem := &bytes.Buffer{}
-	if err := pem.Encode(serverCertPem, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: rawServerCert,
-	}); err != nil {
-		return nil, nil, err
-	}
-
-	serverPrivKeyPem := &bytes.Buffer{}
-	if err := pem.Encode(serverPrivKeyPem, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(rawServerPrivKey),
-	}); err != nil {
-		return nil, nil, err
-	}
-	return serverCertPem.Bytes(), serverPrivKeyPem.Bytes(), nil
+	return sign(serverCert, ca, caPrivKey)
 }
 
 func VerifyServerWithCA(caPem []byte, serverPem []byte) error {
