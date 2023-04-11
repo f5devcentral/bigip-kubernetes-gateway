@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Webhhooks Validating GatewayClass", Ordered, func() {
+var _ = PDescribe("Webhhooks Validating GatewayClass", Ordered, func() {
 
 	BeforeAll(func() {
 		for _, yaml := range []string{

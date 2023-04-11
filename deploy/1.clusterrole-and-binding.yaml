@@ -20,10 +20,10 @@ rules:
   resources: ["configmaps", "events", "ingresses/status", "services/status"]
   verbs: ["get", "list", "watch", "update", "create", "patch"]
 - apiGroups: ["gateway.networking.k8s.io"]
-  resources: ["gatewayclasses", "gateways", "httproutes"]
+  resources: ["gatewayclasses", "gateways", "httproutes", "referencegrants"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["gateway.networking.k8s.io"]
-  resources: ["gatewayclasses/status"]
+  resources: ["gatewayclasses/status", "gateways/status", "httproutes/status", "referencegrants/status"]
   verbs: ["get", "list", "watch", "update"]
 
 ---

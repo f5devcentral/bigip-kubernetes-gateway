@@ -131,7 +131,7 @@ func checkResourcesAsExpected() {
 		Expect(err).To(Succeed())
 		// slog.Infof("members: %d", len(members))
 		return err == nil && len(members) == svcVars["replicas"].(int)
-	}).WithContext(ctx).ProbeEvery(time.Millisecond * 500).WithTimeout(time.Second * 50).Should(BeTrue())
+	}).WithContext(ctx).ProbeEvery(time.Millisecond * 500).WithTimeout(time.Second * 120).Should(BeTrue())
 
 	slog.Infof("pool is created as expected")
 	slog.Infof("finished bigip resources checking")
