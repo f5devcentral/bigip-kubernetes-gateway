@@ -10,9 +10,9 @@ This document describes which Gateway API resources BIG-IP Kubernetes Gateway su
 | [Gateway](#gateway) | Partially supported |
 | [HTTPRoute](#httproute) | Partially supported |
 | [ReferenceGrant](#referencegrant) | Support |
-| [TLSRoute](#tlsroute) | Not supported, experimental in v0.5.1 |
-| [TCPRoute](#tcproute) | Not supported, experimental in v0.5.1 |
-| [UDPRoute](#udproute) | Not supported, experimental in v0.5.1 |
+| [TLSRoute](#tlsroute) | Not supported, experimental in v0.6.2 |
+| [TCPRoute](#tcproute) | Not supported, experimental in v0.6.2 |
+| [UDPRoute](#udproute) | Not supported, experimental in v0.6.2 |
 
 ## Terminology
 
@@ -55,10 +55,12 @@ Fields:
 		* `name` - supported.
 		* `hostname` - not supported.
 		* `port` - supported.
-		* `protocol` - partially supported. Allowed values: `HTTP`.
-		* `tls` - not supported.
+		* `protocol` - partially supported. Allowed values: `HTTP`, `HTTPS`.
+		* `tls` - supported.
+		  * `mode` - supported.
+		  * `certificateRefs` - supported.
 		  * `options` - not supported.
-		* `allowedRoutes` - supported. 
+		* `allowedRoutes` - supported.
 	* `addresses` - partially upported.
 	    * type `IPAddress`: supported.
 		* type `Hostname`: will not support.
@@ -81,7 +83,7 @@ Fields:
   * `parentRefs` - partially supported.
     * `group` `kind`: partially supported, only for `Gateway`.
 	* `namespace` `name`: supported.
-    * `sectionName` must always be set.
+    * `sectionName` supported.
 	* `port`: will not support. 
   * `hostnames` - supported. 
   * `rules`
@@ -91,12 +93,11 @@ Fields:
 	  * `queryParams` - supported. 
 	  * `method` -  supported.
 	* `filters`
-		* `type` - supported.
 		* `requestRedirect` - supported. 
 		* `requestHeaderModifier` - supported.
 		* `responseHeaderModifier` - supported.
         * `requestMirror` - not supported.
-        * `urlRewrite` - supported, experimental in v0.5.1.
+        * `urlRewrite` - supported, experimental.
         * `extensionRef` - partially supported, only v1.Service.
 	* `backendRefs` - partially supported.
 	    * `group` `kind` partially supported. only v1.Service. 
@@ -110,6 +111,11 @@ Fields:
 ### ReferenceGrant
 
 > Status: Supported(since v0.2.0).
+
+  Support the reference grants:
+
+  * from `Gateway` to `Secret`
+  * from `HTTPRoute` to `Service`
 
 ### TLSRoute
 
