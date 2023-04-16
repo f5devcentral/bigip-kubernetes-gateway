@@ -25,7 +25,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/zongzw/f5-bigip-rest/deployer"
 	"github.com/zongzw/f5-bigip-rest/utils"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -33,9 +32,9 @@ import (
 )
 
 type HttpRouteReconciler struct {
-	client.Client
-	Scheme   *runtime.Scheme
-	LogLevel string
+	ObjectType client.Object
+	Client     client.Client
+	LogLevel   string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -58,7 +57,7 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	var obj gatewayv1beta1.HTTPRoute
 
 	slog.Debugf("handling " + req.NamespacedName.String())
-	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
 			defer pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
@@ -73,16 +72,8 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *HttpRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// // {"error": "the cache is not started, can not read objects"}
-	// var hrList gatewayv1beta1.HTTPRouteList
-	// if err := r.List(context.TODO(), &hrList, &client.ListOptions{}); err != nil {
-	// 	ctrl.Log.Error(err, "failed to list hrs")
-	// }
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1beta1.HTTPRoute{}).
-		Complete(r)
+func (r *HttpRouteReconciler) GetResObject() client.Object {
+	return r.ObjectType
 }
 
 func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

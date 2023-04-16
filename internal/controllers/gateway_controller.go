@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -34,9 +33,9 @@ import (
 )
 
 type GatewayReconciler struct {
-	client.Client
-	Scheme   *runtime.Scheme
-	LogLevel string
+	ObjectType client.Object
+	Client     client.Client
+	LogLevel   string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -58,7 +57,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	var obj gatewayv1beta1.Gateway
 
 	slog.Debugf("handling " + req.NamespacedName.String())
-	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
 			defer pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
@@ -73,11 +72,8 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1beta1.Gateway{}).
-		Complete(r)
+func (r *GatewayReconciler) GetResObject() client.Object {
+	return r.ObjectType
 }
 
 func handleDeletingGateway(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

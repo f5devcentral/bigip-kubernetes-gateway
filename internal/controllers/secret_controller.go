@@ -24,23 +24,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/zongzw/f5-bigip-rest/utils"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type SecretReconciler struct {
-	Client client.Client
-	Scheme *runtime.Scheme
-	// Cache    cache.Cache
-	LogLevel string
+	ObjectType client.Object
+	Client     client.Client
+	LogLevel   string
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1.Secret{}).
-		Complete(r)
+func (r *SecretReconciler) GetResObject() client.Object {
+	return r.ObjectType
 }
 
 func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

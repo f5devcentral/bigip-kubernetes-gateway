@@ -33,6 +33,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v3"
+	v1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -205,56 +206,56 @@ func getConfigs(bigipConfigs *pkg.BIGIPConfigs, confDir string) error {
 }
 
 func setupReconcilers(mgr manager.Manager) {
+	resources := controllers.ResourcesReconciler{}
 
-	if err := (&controllers.GatewayClassReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		LogLevel: level,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "GatewayClass")
-		os.Exit(1)
-	}
-
-	if err := (&controllers.GatewayReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		LogLevel: level,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Gateway")
-		os.Exit(1)
-	}
-
-	if err := (&controllers.HttpRouteReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		LogLevel: level,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "HttpRoute")
-		os.Exit(1)
-	}
-
-	if err := (&controllers.ReferenceGrantReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		LogLevel: level,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ReferenceGrant")
-		os.Exit(1)
-	}
-
-	if err := (&controllers.SecretReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		LogLevel: level,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "conntroller", "Secret")
-		os.Exit(1)
-	}
-
-	if err := controllers.SetupReconcilerForCoreV1WithManager(mgr, level); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Endpoints")
-		os.Exit(1)
-	}
+	resources.Register(
+		&controllers.GatewayClassReconciler{
+			ObjectType: &gatewayv1beta1.GatewayClass{},
+			Client:     mgr.GetClient(),
+			// LogLevel:   level,
+		},
+		&controllers.GatewayReconciler{
+			ObjectType: &gatewayv1beta1.Gateway{},
+			Client:     mgr.GetClient(),
+			// LogLevel:   level,
+		},
+		&controllers.HttpRouteReconciler{
+			ObjectType: &gatewayv1beta1.HTTPRoute{},
+			Client:     mgr.GetClient(),
+			// LogLevel:   level,
+		},
+		&controllers.ReferenceGrantReconciler{
+			ObjectType: &gatewayv1beta1.ReferenceGrant{},
+			Client:     mgr.GetClient(),
+			// LogLevel:   level,
+		},
+		&controllers.SecretReconciler{
+			ObjectType: &v1.Secret{},
+			Client:     mgr.GetClient(),
+			// LogLevel:   level,
+		},
+		&controllers.EndpointsReconciler{
+			ObjectType: &v1.Endpoints{},
+			Client:     mgr.GetClient(),
+			// LogLevel:   level,
+		},
+		&controllers.ServiceReconciler{
+			ObjectType: &v1.Service{},
+			Client:     mgr.GetClient(),
+			// LogLevel:   level,
+		},
+		&controllers.NodeReconciler{
+			ObjectType: &v1.Node{},
+			Client:     mgr.GetClient(),
+			// LogLevel:   level,
+		},
+		&controllers.NamespaceReconciler{
+			ObjectType: &v1.Namespace{},
+			Client:     mgr.GetClient(),
+			// LogLevel:   level,
+		},
+	)
+	resources.StartReconcilers(mgr)
 }
 
 func setupWebhooks(mgr manager.Manager) {

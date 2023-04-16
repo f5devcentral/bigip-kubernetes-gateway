@@ -25,7 +25,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/zongzw/f5-bigip-rest/deployer"
 	"github.com/zongzw/f5-bigip-rest/utils"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -34,9 +33,9 @@ import (
 )
 
 type GatewayClassReconciler struct {
-	client.Client
-	Scheme   *runtime.Scheme
-	LogLevel string
+	ObjectType client.Object
+	Client     client.Client
+	LogLevel   string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -62,7 +61,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	var obj gatewayv1beta1.GatewayClass
 	slog.Debugf("handling gatewayclass " + req.Name)
-	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
+	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			defer pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
 			return handleDeletingGatewayClass(lctx, req)
@@ -98,11 +97,8 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *GatewayClassReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayv1beta1.GatewayClass{}).
-		Complete(r)
+func (r *GatewayClassReconciler) GetResObject() client.Object {
+	return r.ObjectType
 }
 
 func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
