@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
-	"github.com/zongzw/f5-bigip-rest/utils"
+	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 )
 
 type BIGIPHelper struct {

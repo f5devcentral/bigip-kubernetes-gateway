@@ -47,9 +47,9 @@ import (
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/controllers"
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/webhooks"
-	f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
-	"github.com/zongzw/f5-bigip-rest/deployer"
-	"github.com/zongzw/f5-bigip-rest/utils"
+	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
+	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 
 	//+kubebuilder:scaffold:imports
 

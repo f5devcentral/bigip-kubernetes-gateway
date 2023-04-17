@@ -24,8 +24,8 @@ import (
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/k8s"
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/google/uuid"
-	"github.com/zongzw/f5-bigip-rest/deployer"
-	"github.com/zongzw/f5-bigip-rest/utils"
+	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 

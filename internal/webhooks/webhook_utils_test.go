@@ -7,7 +7,7 @@ import (
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/zongzw/f5-bigip-rest/utils"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
