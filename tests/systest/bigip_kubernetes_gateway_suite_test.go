@@ -8,7 +8,7 @@ import (
 	"github.com/f5devcentral/bigip-kubernetes-gateway/tests/systest/helpers"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/zongzw/f5-bigip-rest/utils"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 )
 
 var (

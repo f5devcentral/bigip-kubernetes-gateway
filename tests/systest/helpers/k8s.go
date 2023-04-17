@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/zongzw/f5-bigip-rest/utils"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"

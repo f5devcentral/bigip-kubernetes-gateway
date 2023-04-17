@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	f5_bigip "github.com/zongzw/f5-bigip-rest/bigip"
+	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 )
 
 type BIGIPHelper struct {
@@ -36,7 +37,7 @@ func (bh *BIGIPHelper) Check(ctx context.Context, kind, name, partition, subfold
 		return fmt.Errorf("empty response from bigip with p(%s) n(%s), f(%s), k(%s)", partition, name, subfolder, kind)
 	} else {
 		for k, props := range properties {
-			if !deepequal((*existings)[k], props) {
+			if !utils.DeepEqual((*existings)[k], props) {
 				return fmt.Errorf("expected: %v, actually: %v", props, (*existings)[k])
 			}
 		}

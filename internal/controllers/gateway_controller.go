@@ -28,8 +28,8 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/zongzw/f5-bigip-rest/deployer"
-	"github.com/zongzw/f5-bigip-rest/utils"
+	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 )
 
 type GatewayReconciler struct {
