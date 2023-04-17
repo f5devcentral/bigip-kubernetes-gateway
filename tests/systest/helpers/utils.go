@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"encoding/json"
-	"reflect"
 
 	"gopkg.in/yaml.v3"
 	"k8s.io/client-go/dynamic"
@@ -63,24 +62,4 @@ func yaml2json(data []byte) ([]byte, error) {
 	} else {
 		return out, nil
 	}
-}
-
-func deepequal(a, b interface{}) bool {
-	ba, ea := json.Marshal(a)
-	bb, eb := json.Marshal(b)
-	if ea != nil || eb != nil {
-		return false
-	}
-	if reflect.DeepEqual(ba, bb) {
-		return true
-	}
-
-	// ja and jb have no type info,
-	// so that []interface{}{"abc"} and []string{"abc"} are the same.
-	var ja, jb interface{}
-	ea, eb = json.Unmarshal(ba, ja), json.Unmarshal(bb, jb)
-	if ea != nil || eb != nil {
-		return false
-	}
-	return reflect.DeepEqual(ja, jb)
 }
