@@ -212,47 +212,47 @@ func setupReconcilers(mgr manager.Manager) {
 		&controllers.GatewayClassReconciler{
 			ObjectType: &gatewayv1beta1.GatewayClass{},
 			Client:     mgr.GetClient(),
-			// LogLevel:   level,
+			LogLevel:   level,
 		},
 		&controllers.GatewayReconciler{
 			ObjectType: &gatewayv1beta1.Gateway{},
 			Client:     mgr.GetClient(),
-			// LogLevel:   level,
+			LogLevel:   level,
 		},
 		&controllers.HttpRouteReconciler{
 			ObjectType: &gatewayv1beta1.HTTPRoute{},
 			Client:     mgr.GetClient(),
-			// LogLevel:   level,
+			LogLevel:   level,
 		},
 		&controllers.ReferenceGrantReconciler{
 			ObjectType: &gatewayv1beta1.ReferenceGrant{},
 			Client:     mgr.GetClient(),
-			// LogLevel:   level,
+			LogLevel:   level,
 		},
 		&controllers.SecretReconciler{
 			ObjectType: &v1.Secret{},
 			Client:     mgr.GetClient(),
-			// LogLevel:   level,
+			LogLevel:   level,
 		},
 		&controllers.EndpointsReconciler{
 			ObjectType: &v1.Endpoints{},
 			Client:     mgr.GetClient(),
-			// LogLevel:   level,
+			LogLevel:   level,
 		},
 		&controllers.ServiceReconciler{
 			ObjectType: &v1.Service{},
 			Client:     mgr.GetClient(),
-			// LogLevel:   level,
+			LogLevel:   level,
 		},
 		&controllers.NodeReconciler{
 			ObjectType: &v1.Node{},
 			Client:     mgr.GetClient(),
-			// LogLevel:   level,
+			LogLevel:   level,
 		},
 		&controllers.NamespaceReconciler{
 			ObjectType: &v1.Namespace{},
 			Client:     mgr.GetClient(),
-			// LogLevel:   level,
+			LogLevel:   level,
 		},
 	)
 	resources.StartReconcilers(mgr)
