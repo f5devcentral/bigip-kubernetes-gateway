@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
 )
 
 var _ = Describe("Controllers basic test", Ordered, func() {
@@ -136,3 +136,5 @@ func checkResourcesAsExpected() {
 	slog.Infof("pool is created as expected")
 	slog.Infof("finished bigip resources checking")
 }
+
+// TODO: Add tests for updating gateway.yaml with addresses changed
