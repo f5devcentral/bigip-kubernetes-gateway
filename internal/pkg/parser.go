@@ -218,6 +218,13 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 					},
 					"rules": []interface{}{},
 				}
+				rlt["ltm/virtual-address/"+ipaddr] = map[string]interface{}{
+					"name":               ipaddr, // must be set: 403, {"code":403,"message":"Operation is not supported on component /ltm/virtual-address."
+					"address":            ipaddr,
+					"mask":               "255.255.255.255",
+					"icmpEcho":           "enabled",
+					"routeAdvertisement": "disabled",
+				}
 				if _, ok := irules[name]; ok {
 					rlt["ltm/virtual/"+name].(map[string]interface{})["rules"] = irules[name]
 				}
