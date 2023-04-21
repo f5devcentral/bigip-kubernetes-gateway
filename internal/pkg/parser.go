@@ -51,6 +51,42 @@ func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gate
 	}, nil
 }
 
+func ParseAllForClass(className string) (map[string]interface{}, error) {
+	defer utils.TimeItToPrometheus()()
+
+	var gwc *gatewayv1beta1.GatewayClass
+	if gwc = ActiveSIGs.GetGatewayClass(className); gwc == nil ||
+		gwc.Spec.ControllerName != gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
+		return map[string]interface{}{}, nil
+	}
+
+	cgwObjs := ActiveSIGs.AttachedGateways(gwc)
+
+	rlt := map[string]interface{}{}
+	for _, gw := range cgwObjs {
+		if cfgs, err := parseGateway(gw); err != nil {
+			return map[string]interface{}{}, err
+		} else {
+			for k, v := range cfgs {
+				rlt[k] = v
+			}
+		}
+		hrs := ActiveSIGs.AttachedHTTPRoutes(gw)
+		for _, hr := range hrs {
+			if cfgs, err := parseHTTPRoute(className, hr); err != nil {
+				return map[string]interface{}{}, err
+			} else {
+				for k, v := range cfgs {
+					rlt[k] = v
+				}
+			}
+		}
+	}
+	return map[string]interface{}{
+		"": rlt,
+	}, nil
+}
+
 // ParseServicesRelatedForAll parse all refered services
 func ParseServicesRelatedForAll() (map[string]interface{}, error) {
 

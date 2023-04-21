@@ -223,6 +223,13 @@ func (c *SIGCache) UnsetReferenceGrant(keyname string) {
 	}
 }
 
+func (c *SIGCache) GetReferenceGrant(keyname string) *gatewayv1beta1.ReferenceGrant {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.ReferenceGrant[keyname]
+}
+
 func (c *SIGCache) AttachedGateways(gwc *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
@@ -512,6 +519,64 @@ func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayv1beta1.Gateway
 	rlt := []*gatewayv1beta1.Gateway{}
 	for _, gw := range gwmap {
 		rlt = append(rlt, gw)
+	}
+	return rlt
+}
+
+func (c *SIGCache) RGImpactedGatewayClasses(rg *gatewayv1beta1.ReferenceGrant) []string {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	hrs := c._rgImpactedHTTPRoutes(rg)
+	gws := c._rgImpactedGateways(rg)
+	for _, hr := range hrs {
+		gws = append(gws, c._gatewayRefsOf(hr)...)
+	}
+	gws = UnifiedGateways(gws)
+	return ClassNamesOfGateways(gws)
+}
+
+func (c *SIGCache) _rgImpactedGateways(rg *gatewayv1beta1.ReferenceGrant) []*gatewayv1beta1.Gateway {
+	defer utils.TimeItToPrometheus()()
+
+	rlt := []*gatewayv1beta1.Gateway{}
+	if rg == nil {
+		return rlt
+	}
+
+	for _, f := range rg.Spec.From {
+		if gatewayv1beta1.GroupName == f.Group &&
+			reflect.TypeOf(gatewayv1beta1.Gateway{}).Name() == string(f.Kind) {
+			for _, gw := range c.Gateway {
+				if gw.Namespace == string(f.Namespace) {
+					rlt = append(rlt, gw)
+				}
+			}
+		}
+	}
+
+	return rlt
+}
+
+func (c *SIGCache) _rgImpactedHTTPRoutes(rg *gatewayv1beta1.ReferenceGrant) []*gatewayv1beta1.HTTPRoute {
+	defer utils.TimeItToPrometheus()()
+
+	rlt := []*gatewayv1beta1.HTTPRoute{}
+	if rg == nil {
+		return rlt
+	}
+
+	for _, f := range rg.Spec.From {
+		if gatewayv1beta1.GroupName == f.Group &&
+			reflect.TypeOf(gatewayv1beta1.HTTPRoute{}).Name() == string(f.Kind) {
+			for _, hr := range c.HTTPRoute {
+				if hr.Namespace == string(f.Namespace) {
+					rlt = append(rlt, hr)
+				}
+			}
+		}
 	}
 	return rlt
 }

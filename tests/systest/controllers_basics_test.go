@@ -137,4 +137,14 @@ func checkResourcesAsExpected() {
 	slog.Infof("finished bigip resources checking")
 }
 
-// TODO: Add tests for updating gateway.yaml with addresses changed
+// TODO: Add tests for
+//	updating gateway.yaml with addresses changed
+//		-> check the virtual address is updated, legacy ones are removed.
+// 	multiple addresses in the gateway
+//		-> check multiple virtual created
+// 	multiple gateways using the same address.
+//		-> check virtual address are shared, and still exists when deleting one gateway.
+//  multiple httproutes(of different classes) referring the same service
+//		-> service is created and shared; still exists when deleting one httproute.
+//  referencegrant for gateway <-> secret and httproute <-> service
+//		-> check service is upserted or deleted as expected.

@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/google/uuid"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
+	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -182,7 +182,7 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 
 	// We still need to consider gateways that were previously associated but are no longer associated,
 	// Or the previously associated gateways may be recognized as resource deletions.
-	gws = unifiedGateways(append(gws, pkg.ActiveSIGs.GatewayRefsOf(obj.DeepCopy())...))
+	gws = pkg.UnifiedGateways(append(gws, pkg.ActiveSIGs.GatewayRefsOf(obj.DeepCopy())...))
 
 	for _, gw := range gws {
 		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
@@ -218,19 +218,4 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func unifiedGateways(objs []*gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
-
-	m := map[string]bool{}
-	rlt := []*gatewayv1beta1.Gateway{}
-
-	for _, obj := range objs {
-		name := utils.Keyname(obj.Namespace, obj.Name)
-		if _, f := m[name]; !f {
-			m[name] = true
-			rlt = append(rlt, obj)
-		}
-	}
-	return rlt
 }
