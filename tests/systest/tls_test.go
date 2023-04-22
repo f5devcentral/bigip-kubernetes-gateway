@@ -23,10 +23,11 @@ var yamlTLSTpl embed.FS
 var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 	const (
 		tlsGatewayClassName = "bigip-tls"
-		partition
-		tlsSecretName  = "tls-basic"
-		tlsGatewayName = "tls-gateway"
-		ipAddress      = "192.168.10.123"
+		partition           = tlsGatewayClassName
+		secretNamespace     = "default"
+		tlsSecretName       = "tls-basic"
+		tlsGatewayName      = "tls-gateway"
+		ipAddress           = "192.168.10.123"
 	)
 	var ca, caPrivKey, serverCert, serverPrivKey []byte
 
@@ -67,9 +68,10 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 			Expect(k8sResource(
 				"templates/tls/secret.yaml",
 				map[string]interface{}{
-					"name": tlsSecretName,
-					"cert": crt,
-					"key":  key,
+					"name":      tlsSecretName,
+					"namespace": secretNamespace,
+					"cert":      crt,
+					"key":       key,
 				},
 				k8s.Apply,
 			)).To(Succeed())
@@ -115,7 +117,7 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 	When("Both TLS Secret and TLS Gateway have been created on K8S", func() {
 		It("Check ssl-cert has been created on BigIP", func() {
 			kind, partition, subfolder := "sys/file/ssl-cert", partition, ""
-			name := fmt.Sprintf("default_%s.crt", tlsSecretName)
+			name := tlsName(secretNamespace, tlsSecretName) + ".crt"
 			Eventually(checkExist).WithContext(ctx).WithArguments(kind, name, partition, subfolder, bip.Exist).
 				WithTimeout(time.Second * 10).ProbeEvery(time.Millisecond * 500).
 				Should(BeTrue())
@@ -158,7 +160,7 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 
 		It("Check ssl-cert has been deleted from BigIP", func() {
 			kind, partition, subfolder := "sys/file/ssl-cert", partition, ""
-			name := fmt.Sprintf("default_%s.crt", tlsSecretName)
+			name := tlsName(secretNamespace, tlsSecretName) + ".crt"
 			Eventually(checkExist).WithContext(ctx).WithArguments(kind, name, partition, subfolder, bip.Exist).
 				WithTimeout(time.Second * 10).ProbeEvery(time.Millisecond * 500).
 				Should(BeFalse())
@@ -175,9 +177,10 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 			Expect(k8sResource(
 				"templates/tls/secret.yaml",
 				map[string]interface{}{
-					"name": tlsSecretName,
-					"cert": crt,
-					"key":  key,
+					"name":      tlsSecretName,
+					"namespace": secretNamespace,
+					"cert":      crt,
+					"key":       key,
 				},
 				k8s.Delete,
 			)).To(Succeed())
@@ -232,4 +235,8 @@ func checkExist(cxt context.Context, kind, name, partition, subfolder string, ac
 		Fail(err.Error())
 		return false
 	}
+}
+
+func tlsName(ns, n string) string {
+	return strings.Join([]string{"scrt", ns, n}, ".")
 }

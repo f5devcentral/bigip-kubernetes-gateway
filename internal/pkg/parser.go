@@ -161,9 +161,15 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	irules := map[string][]string{}
 	listeners := map[string]*gatewayv1beta1.Listener{}
 
+	// listener mapping
 	for i, listener := range gw.Spec.Listeners {
 		vsname := gwListenerName(gw, &listener)
 		listeners[vsname] = &gw.Spec.Listeners[i]
+	}
+
+	// irules mapping: when listener.Hostname is not nil
+	for _, listener := range gw.Spec.Listeners {
+		vsname := gwListenerName(gw, &listener)
 		if listener.Hostname != nil {
 			if _, ok := irules[vsname]; !ok {
 				irules[vsname] = []string{}
@@ -183,6 +189,7 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 		}
 	}
 
+	// irules mapping: for httproutes
 	hrs := ActiveSIGs.AttachedHTTPRoutes(gw)
 	for _, hr := range hrs {
 		for _, pr := range hr.Spec.ParentRefs {
@@ -203,6 +210,22 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 			}
 		}
 	}
+
+	// clientssl if exists
+	scrtmap, err := ActiveSIGs.AttachedSecrets(gw)
+	if err != nil {
+		return map[string]interface{}{}, err
+	}
+	for _, scrts := range scrtmap {
+		for i, scrt := range scrts {
+			cfg := parseSecret(scrt, i == 0)
+			for k, v := range cfg {
+				rlt[k] = v
+			}
+		}
+	}
+
+	// virtual
 	for _, addr := range gw.Spec.Addresses {
 		if *addr.Type == gatewayv1beta1.IPAddressType {
 			ipaddr := addr.Value
@@ -216,15 +239,9 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 					ipProtocol = "tcp"
 				case gatewayv1beta1.HTTPSProtocolType:
 					profiles = []interface{}{map[string]string{"name": "http"}}
-					if listener.TLS == nil {
-						return map[string]interface{}{}, fmt.Errorf("listener.TLS must be set for protocol %s", listener.Protocol)
-					} else {
-						if listener.TLS.Mode == nil || *listener.TLS.Mode == gatewayv1beta1.TLSModeTerminate {
-							ssl_profiles := parseSSL(&listener, rlt, gw)
-							for _, ssl := range ssl_profiles {
-								profiles = append(profiles, map[string]string{"name": ssl})
-							}
-						}
+					lsname := gwListenerName(gw, &listener)
+					for _, scrt := range scrtmap[lsname] {
+						profiles = append(profiles, map[string]string{"name": tlsName(scrt)})
 					}
 					ipProtocol = "tcp"
 				case gatewayv1beta1.TCPProtocolType:
@@ -346,70 +363,43 @@ func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) er
 	return nil
 }
 
-func parseSSL(ls *gatewayv1beta1.Listener, rlt map[string]any, gw *gatewayv1beta1.Gateway) []string {
-	certRefs := ls.TLS.CertificateRefs
-	var profileNames []string
+func parseSecret(scrt *v1.Secret, sniDefault bool) map[string]interface{} {
+	rlt := map[string]interface{}{}
 
-	ns := gw.Namespace
-	for i, cert := range certRefs {
-		if cert.Namespace != nil {
-			ns = string(*cert.Namespace)
-		}
-		nsn := utils.Keyname(ns, string(cert.Name))
-		scrt := ActiveSIGs.GetSecret(nsn)
-
-		/*
-			TODO: what if existed gateway (old/new) (yaml) uses some tls secrets
-			are deleted by user? we need some ways to tell user the gateway yaml
-			is not up to date or wrong.
-
-			1. It prevents user from misconfiguring the gateway.
-			2. It prevents bigip from dirty configuration.
-
-			Maybe we needs status or webhook to solve this problem.
-
-			For now, we just IGNORE the problem, and leave some dirty tls
-			configurations on BigIP.
-		*/
-		if scrt == nil || scrt.Type != v1.SecretTypeTLS {
-			continue
-		}
-		if !ActiveSIGs.CanRefer(gw, scrt) {
-			continue
-		}
-		crtContent := string(scrt.Data[v1.TLSCertKey])
-		keyContent := string(scrt.Data[v1.TLSPrivateKeyKey])
-
-		crtName := ns + "_" + string(cert.Name) + ".crt"
-		keyName := ns + "_" + string(cert.Name) + ".key"
-
-		rlt["shared/file-transfer/uploads/"+crtName] = map[string]any{
-			"content": crtContent,
-		}
-		rlt["shared/file-transfer/uploads/"+keyName] = map[string]any{
-			"content": keyContent,
-		}
-
-		rlt["sys/file/ssl-cert/"+crtName] = map[string]any{
-			"name":       crtName,
-			"sourcePath": "file:/var/config/rest/downloads/" + crtName,
-		}
-		rlt["sys/file/ssl-key/"+keyName] = map[string]any{
-			"name":       keyName,
-			"sourcePath": "file:/var/config/rest/downloads/" + keyName,
-			"passphrase": "",
-		}
-
-		profileName := ns + "_" + string(cert.Name)
-
-		rlt["ltm/profile/client-ssl/"+profileName] = map[string]any{
-			"name":       profileName,
-			"cert":       crtName,
-			"key":        keyName,
-			"sniDefault": i == 0,
-		}
-
-		profileNames = append(profileNames, profileName)
+	if scrt == nil || scrt.Type != v1.SecretTypeTLS {
+		return rlt
 	}
-	return profileNames
+
+	crtContent := string(scrt.Data[v1.TLSCertKey])
+	keyContent := string(scrt.Data[v1.TLSPrivateKeyKey])
+
+	name := tlsName(scrt)
+	crtName := name + ".crt"
+	keyName := name + ".key"
+
+	rlt["shared/file-transfer/uploads/"+crtName] = map[string]any{
+		"content": crtContent,
+	}
+	rlt["shared/file-transfer/uploads/"+keyName] = map[string]any{
+		"content": keyContent,
+	}
+
+	rlt["sys/file/ssl-cert/"+crtName] = map[string]any{
+		"name":       crtName,
+		"sourcePath": "file:/var/config/rest/downloads/" + crtName,
+	}
+	rlt["sys/file/ssl-key/"+keyName] = map[string]any{
+		"name":       keyName,
+		"sourcePath": "file:/var/config/rest/downloads/" + keyName,
+		"passphrase": "",
+	}
+
+	rlt["ltm/profile/client-ssl/"+name] = map[string]any{
+		"name":       name,
+		"cert":       crtName,
+		"key":        keyName,
+		"sniDefault": sniDefault,
+	}
+
+	return rlt
 }

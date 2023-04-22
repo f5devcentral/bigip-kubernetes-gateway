@@ -148,3 +148,5 @@ func checkResourcesAsExpected() {
 //		-> service is created and shared; still exists when deleting one httproute.
 //  referencegrant for gateway <-> secret and httproute <-> service
 //		-> check service is upserted or deleted as expected.
+//  secret reconciler test
+//		-> check gateway tls is up-to-date when secret is CUD-ed.

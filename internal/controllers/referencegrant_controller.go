@@ -60,9 +60,9 @@ func (r *ReferenceGrantReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				pkg.ActiveSIGs.UnsetReferenceGrant(keyname)
 				return fmt.Sprintf("deleting referencegrant %s", keyname)
 			}); err != nil {
-				return ctrl.Result{}, nil
-			} else {
 				return ctrl.Result{}, err
+			} else {
+				return ctrl.Result{}, nil
 			}
 		} else {
 			return ctrl.Result{}, err

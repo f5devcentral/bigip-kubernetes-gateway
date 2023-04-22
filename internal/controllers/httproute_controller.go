@@ -78,7 +78,7 @@ func (r *HttpRouteReconciler) GetResObject() client.Object {
 
 func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
-	gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
+	gws := pkg.ActiveSIGs.GatewayRefsOfHR(hr)
 	drs := map[string]*deployer.DeployRequest{}
 	for _, gw := range gws {
 		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
@@ -150,7 +150,7 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 	slog.Debugf("upserting " + reqnsn)
 
 	hr := pkg.ActiveSIGs.GetHTTPRoute(reqnsn)
-	gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
+	gws := pkg.ActiveSIGs.GatewayRefsOfHR(hr)
 	drs := map[string]*deployer.DeployRequest{}
 
 	for _, gw := range gws {
@@ -182,7 +182,7 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 
 	// We still need to consider gateways that were previously associated but are no longer associated,
 	// Or the previously associated gateways may be recognized as resource deletions.
-	gws = pkg.UnifiedGateways(append(gws, pkg.ActiveSIGs.GatewayRefsOf(obj.DeepCopy())...))
+	gws = pkg.UnifiedGateways(append(gws, pkg.ActiveSIGs.GatewayRefsOfHR(obj.DeepCopy())...))
 
 	for _, gw := range gws {
 		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {

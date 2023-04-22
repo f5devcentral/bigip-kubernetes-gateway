@@ -253,16 +253,18 @@ func (c *SIGCache) _attachedGateways(gwc *gatewayv1beta1.GatewayClass) []*gatewa
 	return gws
 }
 
-func (c *SIGCache) GatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) GatewayRefsOfHR(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	return c._gatewayRefsOf(hr)
+	return c._gatewayRefsOfHR(hr)
 }
 
-func (c *SIGCache) _gatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) _gatewayRefsOfHR(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
+	defer utils.TimeItToPrometheus()()
+
 	if hr == nil {
 		return []*gatewayv1beta1.Gateway{}
 	}
@@ -288,6 +290,95 @@ func (c *SIGCache) _gatewayRefsOf(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta
 		}
 	}
 	return gws
+}
+
+func (c *SIGCache) GatewayRefsOfSecret(scrt *v1.Secret) ([]*gatewayv1beta1.Gateway, error) {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if scrt == nil {
+		return []*gatewayv1beta1.Gateway{}, nil
+	}
+	gws := []*gatewayv1beta1.Gateway{}
+
+	for _, gw := range c.Gateway {
+		for i, found := 0, false; i < len(gw.Spec.Listeners) && !found; i++ {
+			listener := gw.Spec.Listeners[i]
+			if listener.Protocol == gatewayv1beta1.HTTPSProtocolType {
+				if listener.TLS == nil {
+					return gws, fmt.Errorf("invalid tls setting in listener")
+				}
+				if listener.TLS.Mode == nil || *listener.TLS.Mode == gatewayv1beta1.TLSModeTerminate {
+					for _, ref := range listener.TLS.CertificateRefs {
+						ns := gw.Namespace
+						if ref.Namespace != nil {
+							ns = string(*ref.Namespace)
+						}
+						if ns == scrt.Namespace && ref.Name == gatewayv1beta1.ObjectName(scrt.Name) {
+							if err := validateSecretType(ref.Group, ref.Kind); err == nil {
+								if !c._canRefer(gw, scrt) {
+									return gws, fmt.Errorf("'%s' cannot refer to secret '%s'",
+										utils.Keyname(gw.Namespace, gw.Name), utils.Keyname(scrt.Namespace, scrt.Name))
+								}
+								gws = append(gws, gw)
+								found = true
+								break
+							} else {
+								return gws, err
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return gws, nil
+}
+
+func (c *SIGCache) AttachedSecrets(gw *gatewayv1beta1.Gateway) (map[string][]*v1.Secret, error) {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	rlt := map[string][]*v1.Secret{}
+	if gw == nil {
+		return rlt, nil
+	}
+
+	for _, listener := range gw.Spec.Listeners {
+		lsname := gwListenerName(gw, &listener)
+		if _, ok := rlt[lsname]; !ok {
+			rlt[lsname] = []*v1.Secret{}
+		}
+		if listener.Protocol == gatewayv1beta1.HTTPSProtocolType {
+			if listener.TLS == nil {
+				return rlt, fmt.Errorf("invalid listener.TLS setting")
+			}
+			if listener.TLS.Mode == nil || *listener.TLS.Mode == gatewayv1beta1.TLSModeTerminate {
+				for _, ref := range listener.TLS.CertificateRefs {
+					ns := gw.Namespace
+					if ref.Namespace != nil {
+						ns = string(*ref.Namespace)
+					}
+					n := utils.Keyname(ns, string(ref.Name))
+					scrt := c.Secret[n]
+					if scrt != nil && c._canRefer(gw, scrt) {
+						if err := validateSecretType(ref.Group, ref.Kind); err != nil {
+							return rlt, err
+						}
+						rlt[lsname] = append(rlt[lsname], scrt)
+					} else {
+						return rlt, fmt.Errorf("secret %s not exist or cannnot refer to", n)
+					}
+				}
+			}
+		}
+	}
+	return rlt, nil
 }
 
 func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.HTTPRoute {
@@ -481,7 +572,7 @@ func (c *SIGCache) GetNeighborGateways(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 	gwmap := map[string]*gatewayv1beta1.Gateway{}
 	hrs := c._attachedHTTPRoutes(gw)
 	for _, hr := range hrs {
-		gws := c._gatewayRefsOf(hr)
+		gws := c._gatewayRefsOfHR(hr)
 		for _, ng := range gws {
 			kn := utils.Keyname(ng.Namespace, ng.Name)
 			if _, f := gwmap[kn]; !f {
@@ -510,7 +601,7 @@ func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayv1beta1.Gateway
 	for _, svc := range svcs {
 		hrs := c._HTTPRoutesRefsOf(svc)
 		for _, hr := range hrs {
-			gws := c._gatewayRefsOf(hr)
+			gws := c._gatewayRefsOfHR(hr)
 			for _, gw := range gws {
 				gwmap[utils.Keyname(gw.Namespace, gw.Name)] = gw
 			}
@@ -532,7 +623,7 @@ func (c *SIGCache) RGImpactedGatewayClasses(rg *gatewayv1beta1.ReferenceGrant) [
 	hrs := c._rgImpactedHTTPRoutes(rg)
 	gws := c._rgImpactedGateways(rg)
 	for _, hr := range hrs {
-		gws = append(gws, c._gatewayRefsOf(hr)...)
+		gws = append(gws, c._gatewayRefsOfHR(hr)...)
 	}
 	gws = UnifiedGateways(gws)
 	return ClassNamesOfGateways(gws)

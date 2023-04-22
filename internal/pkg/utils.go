@@ -34,6 +34,10 @@ func gwListenerName(gw *gatewayv1beta1.Gateway, ls *gatewayv1beta1.Listener) str
 	return strings.Join([]string{"gw", gw.Namespace, gw.Name, string(ls.Name)}, ".")
 }
 
+func tlsName(scrt *v1.Secret) string {
+	return strings.Join([]string{"scrt", scrt.Namespace, scrt.Name}, ".")
+}
+
 func RouteMatches(gwNamespace string, listener *gatewayv1beta1.Listener, routeNamespace *v1.Namespace, routeType string) bool {
 	// actually, "listener" may be nil, but ".AllowedRoutes.Namespaces.From" will never be nil
 	if listener == nil || listener.AllowedRoutes == nil {
@@ -153,7 +157,10 @@ func ClassNamesOfGateways(gws []*gatewayv1beta1.Gateway) []string {
 }
 
 func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() string) error {
-	slog := utils.LogFromContext(ctx)
+	if len(impactedClasses) == 0 {
+		apply()
+		return nil
+	}
 
 	ocfgs := map[string]interface{}{}
 	ncfgs := map[string]interface{}{}
@@ -161,25 +168,39 @@ func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() 
 	npcfgs := map[string]interface{}{}
 	var err error
 
-	for _, n := range impactedClasses {
-		if ocfgs[n], err = ParseAllForClass(n); err != nil {
+	preParsinng := func() error {
+		for _, n := range impactedClasses {
+			if ocfgs[n], err = ParseAllForClass(n); err != nil {
+				return err
+			}
+		}
+		if opcfgs, err = ParseServicesRelatedForAll(); err != nil {
 			return err
 		}
-	}
-	if opcfgs, err = ParseServicesRelatedForAll(); err != nil {
-		return err
+		return nil
 	}
 
-	meta := apply()
-	slog.Infof("apply: %v: meta: %s\n", apply, meta)
-
-	for _, n := range impactedClasses {
-		if ncfgs[n], err = ParseAllForClass(n); err != nil {
+	postParsing := func() error {
+		for _, n := range impactedClasses {
+			if ncfgs[n], err = ParseAllForClass(n); err != nil {
+				return err
+			}
+		}
+		if npcfgs, err = ParseServicesRelatedForAll(); err != nil {
 			return err
 		}
+		return nil
 	}
-	if npcfgs, err = ParseServicesRelatedForAll(); err != nil {
+
+	meta := ""
+	if err := preParsinng(); err != nil {
+		apply()
 		return err
+	} else {
+		meta = apply()
+		if err := postParsing(); err != nil {
+			return err
+		}
 	}
 
 	drs := map[string]*deployer.DeployRequest{}
@@ -187,13 +208,12 @@ func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() 
 	for _, n := range impactedClasses {
 		ocfg := ocfgs[n].(map[string]interface{})
 		ncfg := ncfgs[n].(map[string]interface{})
-		lctx := context.WithValue(ctx, deployer.CtxKey_CreatePartition, "yes")
 		drs[n] = &deployer.DeployRequest{
 			Meta:      fmt.Sprintf("Operating on %s for event %s", n, meta),
 			From:      &ocfg,
 			To:        &ncfg,
 			Partition: n,
-			Context:   lctx,
+			Context:   ctx,
 		}
 	}
 
@@ -255,4 +275,19 @@ func (rgft *ReferenceGrantFromTo) exists(from, to string) bool {
 			return false
 		}
 	}
+}
+
+// TODO: combine this function with that in webhooks package
+func validateSecretType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind) error {
+	g, k := v1.GroupName, reflect.TypeOf(v1.Secret{}).Name()
+	if group != nil {
+		g = string(*group)
+	}
+	if kind != nil {
+		k = string(*kind)
+	}
+	if g != v1.GroupName || k != reflect.TypeOf(v1.Secret{}).Name() {
+		return fmt.Errorf("not Secret type: '%s'", utils.Keyname(g, k))
+	}
+	return nil
 }
