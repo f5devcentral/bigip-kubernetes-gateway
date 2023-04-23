@@ -582,7 +582,13 @@ func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 	} else {
 		for _, svc := range svcList.Items {
 			slog.Debugf("found svc %s", utils.Keyname(svc.Namespace, svc.Name))
-			c.Service[utils.Keyname(svc.Namespace, svc.Name)] = svc.DeepCopy()
+			// listed services has no TypeMeta set, complement it for referenceGrant check.
+			typed := svc.DeepCopy()
+			typed.TypeMeta = metav1.TypeMeta{
+				APIVersion: v1.SchemeGroupVersion.Version,
+				Kind:       reflect.TypeOf(svc).Name(),
+			}
+			c.Service[utils.Keyname(svc.Namespace, svc.Name)] = typed
 		}
 	}
 
@@ -608,9 +614,15 @@ func (c *SIGCache) syncCoreV1Resources(mgr manager.Manager) error {
 	if secList, err := kubeClient.CoreV1().Secrets(v1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}); err != nil {
 		return err
 	} else {
-		for _, sec := range secList.Items {
-			slog.Debugf("found secret %s", sec.Name)
-			c.Secret[utils.Keyname(sec.Namespace, sec.Name)] = sec.DeepCopy()
+		for _, scrt := range secList.Items {
+			slog.Debugf("found secret %s", scrt.Name)
+			// listed secrets has no TypeMeta set, complement it for referenceGrant check.
+			typed := scrt.DeepCopy()
+			typed.TypeMeta = metav1.TypeMeta{
+				APIVersion: v1.SchemeGroupVersion.Version,
+				Kind:       reflect.TypeOf(scrt).Name(),
+			}
+			c.Secret[utils.Keyname(scrt.Namespace, scrt.Name)] = typed
 		}
 	}
 
