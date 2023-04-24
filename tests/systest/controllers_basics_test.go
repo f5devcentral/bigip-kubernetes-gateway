@@ -150,3 +150,5 @@ func checkResourcesAsExpected() {
 //		-> check service is upserted or deleted as expected.
 //  secret reconciler test
 //		-> check gateway tls is up-to-date when secret is CUD-ed.
+//  namespace reconciler test
+//		-> check namespace label changes would trigger resources updating.

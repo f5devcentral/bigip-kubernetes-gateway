@@ -629,6 +629,35 @@ func (c *SIGCache) RGImpactedGatewayClasses(rg *gatewayv1beta1.ReferenceGrant) [
 	return ClassNamesOfGateways(gws)
 }
 
+func (c *SIGCache) NSImpactedGatewayClasses(ns *v1.Namespace) []string {
+	defer utils.TimeItToPrometheus()()
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if ns == nil {
+		return []string{}
+	}
+
+	names := []string{}
+	for _, hr := range c.HTTPRoute {
+		if hr.Namespace == ns.Name {
+			for _, pr := range hr.Spec.ParentRefs {
+				ns := hr.Namespace
+				if pr.Namespace != nil {
+					ns = string(*pr.Namespace)
+				}
+				name := utils.Keyname(utils.Keyname(ns, string(pr.Name)))
+				if gw, ok := c.Gateway[name]; ok {
+					names = append(names, string(gw.Spec.GatewayClassName))
+				}
+			}
+		}
+	}
+
+	return utils.Unified(names)
+}
+
 func (c *SIGCache) _rgImpactedGateways(rg *gatewayv1beta1.ReferenceGrant) []*gatewayv1beta1.Gateway {
 	defer utils.TimeItToPrometheus()()
 
