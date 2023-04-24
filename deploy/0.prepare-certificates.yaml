@@ -9,6 +9,7 @@ spec:
   selfSigned: {}
 
 ---
+
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -25,7 +26,9 @@ spec:
     name: selfsigned-issuer
     kind: ClusterIssuer
     group: cert-manager.io
+
 ---
+
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -36,6 +39,7 @@ spec:
     secretName: root-secret
 
 ---
+
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

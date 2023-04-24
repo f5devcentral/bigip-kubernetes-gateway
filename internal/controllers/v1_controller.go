@@ -23,9 +23,9 @@ import (
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/k8s"
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/google/uuid"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
+	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -77,6 +77,18 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, err
 		}
 	} else {
+		ns := pkg.ActiveSIGs.GetNamespace(req.Name)
+		if ns != nil && !utils.DeepEqual(ns.Labels, obj.Labels) {
+			cls := pkg.ActiveSIGs.NSImpactedGatewayClasses(&obj)
+			err := pkg.DeployForEvent(lctx, cls, func() string {
+				pkg.ActiveSIGs.SetNamespace(obj.DeepCopy())
+				return "updating namespace " + ns.Name
+			})
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
 		pkg.ActiveSIGs.SetNamespace(obj.DeepCopy())
 		return ctrl.Result{}, nil
 	}
@@ -99,8 +111,9 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, err
 		}
 	} else {
-		defer pkg.ActiveSIGs.SetEndpoints(&obj)
-		return handleUpsertingEndpoints(lctx, &obj)
+		eps := obj.DeepCopy()
+		defer pkg.ActiveSIGs.SetEndpoints(eps)
+		return handleUpsertingEndpoints(lctx, eps)
 	}
 }
 
@@ -121,8 +134,9 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return ctrl.Result{}, err
 		}
 	} else {
-		defer pkg.ActiveSIGs.SetService(&obj)
-		return handleUpsertingService(lctx, &obj)
+		svc := obj.DeepCopy()
+		defer pkg.ActiveSIGs.SetService(svc)
+		return handleUpsertingService(lctx, svc)
 	}
 }
 

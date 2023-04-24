@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/google/uuid"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
+	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -78,7 +78,7 @@ func (r *HttpRouteReconciler) GetResObject() client.Object {
 
 func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
-	gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
+	gws := pkg.ActiveSIGs.GatewayRefsOfHR(hr)
 	drs := map[string]*deployer.DeployRequest{}
 	for _, gw := range gws {
 		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
@@ -150,7 +150,7 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 	slog.Debugf("upserting " + reqnsn)
 
 	hr := pkg.ActiveSIGs.GetHTTPRoute(reqnsn)
-	gws := pkg.ActiveSIGs.GatewayRefsOf(hr)
+	gws := pkg.ActiveSIGs.GatewayRefsOfHR(hr)
 	drs := map[string]*deployer.DeployRequest{}
 
 	for _, gw := range gws {
@@ -182,7 +182,7 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 
 	// We still need to consider gateways that were previously associated but are no longer associated,
 	// Or the previously associated gateways may be recognized as resource deletions.
-	gws = unifiedGateways(append(gws, pkg.ActiveSIGs.GatewayRefsOf(obj.DeepCopy())...))
+	gws = pkg.UnifiedGateways(append(gws, pkg.ActiveSIGs.GatewayRefsOfHR(obj.DeepCopy())...))
 
 	for _, gw := range gws {
 		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
@@ -218,19 +218,4 @@ func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func unifiedGateways(objs []*gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
-
-	m := map[string]bool{}
-	rlt := []*gatewayv1beta1.Gateway{}
-
-	for _, obj := range objs {
-		name := utils.Keyname(obj.Namespace, obj.Name)
-		if _, f := m[name]; !f {
-			m[name] = true
-			rlt = append(rlt, obj)
-		}
-	}
-	return rlt
 }

@@ -18,11 +18,12 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/google/uuid"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
+	"github.com/google/uuid"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,17 +49,51 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	slog := utils.LogFromContext(lctx)
 
 	var obj v1.Secret
-	slog.Infof("serect event: %s", req.NamespacedName)
+	slog.Infof("secret event: %s", req.NamespacedName)
 
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
-		if client.IgnoreNotFound(err) != nil {
+		if client.IgnoreNotFound(err) == nil {
+			// delete
+			scrt := pkg.ActiveSIGs.GetSecret(req.NamespacedName.String())
+			gws, err := pkg.ActiveSIGs.GatewayRefsOfSecret(scrt)
+			if err == nil {
+				names := []string{}
+				for _, gw := range gws {
+					names = append(names, utils.Keyname(gw.Namespace, gw.Name))
+				}
+				if len(names) > 0 {
+					slog.Warnf("there are still gateways referring to secret '%s': %s "+
+						"-- they are not impacted, however, next deployments would fail "+
+						"because of missing the secret", req.NamespacedName, names)
+				}
+			}
+
+			pkg.ActiveSIGs.UnsetSerect(req.NamespacedName.String())
+			return ctrl.Result{}, err
+		} else {
 			return ctrl.Result{}, err
 		}
-		// Can not find Sercet, remove it from the local cache
-		pkg.ActiveSIGs.UnsetSerect(req.NamespacedName.String())
+	} else {
+		// upsert
+		scrt := obj.DeepCopy()
+		gws, err := pkg.ActiveSIGs.GatewayRefsOfSecret(scrt)
+		if err != nil {
+			pkg.ActiveSIGs.SetSecret(obj.DeepCopy())
+			return ctrl.Result{}, err
+		}
+		cls := []string{}
+		for _, gw := range gws {
+			cls = append(cls, string(gw.Spec.GatewayClassName))
+		}
+
+		apply := func() string {
+			pkg.ActiveSIGs.SetSecret(obj.DeepCopy())
+			return fmt.Sprintf("upserting secret %s", req.NamespacedName.String())
+		}
+		if err := pkg.DeployForEvent(lctx, cls, apply); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		return ctrl.Result{}, nil
 	}
-	// Find Secret, add it to the local cache.
-	pkg.ActiveSIGs.SetSecret(obj.DeepCopy())
-	return ctrl.Result{}, nil
 }

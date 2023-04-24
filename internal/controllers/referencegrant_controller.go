@@ -18,11 +18,12 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/google/uuid"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
+	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -44,23 +45,42 @@ func (r *ReferenceGrantReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	keyname := req.NamespacedName.String()
 	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
 	slog := utils.LogFromContext(lctx)
 
 	var obj gatewayv1beta1.ReferenceGrant
 	slog.Infof("referencegrant event: %s", req.NamespacedName)
-	// TODO: update resources mappings since grant items are changed.
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
-			pkg.ActiveSIGs.UnsetReferenceGrant(req.NamespacedName.String())
-			return ctrl.Result{}, nil
+			rg := pkg.ActiveSIGs.GetReferenceGrant(keyname)
+			classNames := pkg.ActiveSIGs.RGImpactedGatewayClasses(rg)
+			if err := pkg.DeployForEvent(lctx, classNames, func() string {
+				pkg.ActiveSIGs.UnsetReferenceGrant(keyname)
+				return fmt.Sprintf("deleting referencegrant %s", keyname)
+			}); err != nil {
+				return ctrl.Result{}, err
+			} else {
+				return ctrl.Result{}, nil
+			}
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
 		// upsert resources
-		pkg.ActiveSIGs.SetReferenceGrant(obj.DeepCopy())
-		return ctrl.Result{}, nil
+		org := pkg.ActiveSIGs.GetReferenceGrant(keyname)
+		nrg := obj.DeepCopy()
+		ocls := pkg.ActiveSIGs.RGImpactedGatewayClasses(org)
+		ncls := pkg.ActiveSIGs.RGImpactedGatewayClasses(nrg)
+		clss := utils.Unified(append(ocls, ncls...))
+		if err := pkg.DeployForEvent(lctx, clss, func() string {
+			pkg.ActiveSIGs.SetReferenceGrant(nrg)
+			return fmt.Sprintf("upserting referencegrant %s", keyname)
+		}); err != nil {
+			return ctrl.Result{}, nil
+		} else {
+			return ctrl.Result{}, err
+		}
 	}
 }
