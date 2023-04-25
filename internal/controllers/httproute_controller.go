@@ -18,11 +18,9 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -60,162 +58,37 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			// delete resources
-			defer pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
-			return handleDeletingHTTPRoute(lctx, req)
+			hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
+			gws := pkg.ActiveSIGs.GatewayRefsOfHR(hr)
+			cls := []string{}
+			for _, gw := range gws {
+				cls = append(cls, string(gw.Spec.GatewayClassName))
+			}
+			return ctrl.Result{}, pkg.DeployForEvent(lctx, cls, func() string {
+				pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
+				return "deleting httproute " + req.NamespacedName.String()
+			})
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
 		// upsert resources
-		defer pkg.ActiveSIGs.SetHTTPRoute(&obj)
-		return handleUpsertingHTTPRoute(lctx, &obj)
+		nhr := obj.DeepCopy()
+		ohr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
+		gws := pkg.ActiveSIGs.GatewayRefsOfHR(ohr)
+		gws = append(gws, pkg.ActiveSIGs.GatewayRefsOfHR(nhr)...)
+		cls := []string{}
+		for _, gw := range gws {
+			cls = append(cls, string(gw.Spec.GatewayClassName))
+		}
+		cls = utils.Unified(cls)
+		return ctrl.Result{}, pkg.DeployForEvent(lctx, cls, func() string {
+			pkg.ActiveSIGs.SetHTTPRoute(&obj)
+			return "upserting httproute " + req.NamespacedName.String()
+		})
 	}
 }
 
 func (r *HttpRouteReconciler) GetResObject() client.Object {
 	return r.ObjectType
-}
-
-func handleDeletingHTTPRoute(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	hr := pkg.ActiveSIGs.GetHTTPRoute(req.NamespacedName.String())
-	gws := pkg.ActiveSIGs.GatewayRefsOfHR(hr)
-	drs := map[string]*deployer.DeployRequest{}
-	for _, gw := range gws {
-		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-			drs[string(gw.Spec.GatewayClassName)] = &deployer.DeployRequest{
-				Meta:      fmt.Sprintf("deleting httproute '%s'", req.NamespacedName.String()),
-				Partition: string(gw.Spec.GatewayClassName),
-			}
-		}
-		dr := drs[string(gw.Spec.GatewayClassName)]
-		if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-			return ctrl.Result{}, err
-		} else {
-			dr.From = &ocfgs
-		}
-	}
-
-	opcfgs, err := pkg.ParseServicesRelatedForAll()
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
-
-	npcfgs, err := pkg.ParseServicesRelatedForAll()
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	for _, gw := range gws {
-
-		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-			drs[string(gw.Spec.GatewayClassName)] = &deployer.DeployRequest{
-				Meta:      fmt.Sprintf("deleting httproute '%s'", req.NamespacedName.String()),
-				Partition: string(gw.Spec.GatewayClassName),
-			}
-		}
-		dr := drs[string(gw.Spec.GatewayClassName)]
-		if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-			return ctrl.Result{}, err
-		} else {
-			dr.To = &ncfgs
-		}
-	}
-
-	for _, dr := range drs {
-		pkg.PendingDeploys <- deployer.DeployRequest{
-			Meta:      dr.Meta,
-			From:      dr.From,
-			To:        dr.To,
-			Partition: dr.Partition,
-			Context:   ctx,
-		}
-	}
-
-	pkg.PendingDeploys <- deployer.DeployRequest{
-		Meta:      fmt.Sprintf("updating services for deleting httproute '%s'", req.NamespacedName.String()),
-		From:      &opcfgs,
-		To:        &npcfgs,
-		Partition: "cis-c-tenant",
-		Context:   ctx,
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func handleUpsertingHTTPRoute(ctx context.Context, obj *gatewayv1beta1.HTTPRoute) (ctrl.Result, error) {
-	slog := utils.LogFromContext(ctx)
-	reqnsn := utils.Keyname(obj.Namespace, obj.Name)
-	slog.Debugf("upserting " + reqnsn)
-
-	hr := pkg.ActiveSIGs.GetHTTPRoute(reqnsn)
-	gws := pkg.ActiveSIGs.GatewayRefsOfHR(hr)
-	drs := map[string]*deployer.DeployRequest{}
-
-	for _, gw := range gws {
-		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-			drs[string(gw.Spec.GatewayClassName)] = &deployer.DeployRequest{
-				Meta:      fmt.Sprintf("upserting httproute '%s'", reqnsn),
-				Partition: string(gw.Spec.GatewayClassName),
-			}
-		}
-		dr := drs[string(gw.Spec.GatewayClassName)]
-		if ocfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-			return ctrl.Result{}, err
-		} else {
-			dr.From = &ocfgs
-		}
-	}
-
-	opcfgs, err := pkg.ParseServicesRelatedForAll()
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	pkg.ActiveSIGs.SetHTTPRoute(obj.DeepCopy())
-
-	npcfgs, err := pkg.ParseServicesRelatedForAll()
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// We still need to consider gateways that were previously associated but are no longer associated,
-	// Or the previously associated gateways may be recognized as resource deletions.
-	gws = pkg.UnifiedGateways(append(gws, pkg.ActiveSIGs.GatewayRefsOfHR(obj.DeepCopy())...))
-
-	for _, gw := range gws {
-		if _, f := drs[string(gw.Spec.GatewayClassName)]; !f {
-			drs[string(gw.Spec.GatewayClassName)] = &deployer.DeployRequest{
-				Meta:      fmt.Sprintf("upserting httproute '%s'", reqnsn),
-				Partition: string(gw.Spec.GatewayClassName),
-			}
-		}
-		dr := drs[string(gw.Spec.GatewayClassName)]
-		if ncfgs, err := pkg.ParseGatewayRelatedForClass(string(gw.Spec.GatewayClassName), gws); err != nil {
-			return ctrl.Result{}, err
-		} else {
-			dr.To = &ncfgs
-		}
-	}
-
-	pkg.PendingDeploys <- deployer.DeployRequest{
-		Meta:      fmt.Sprintf("updating services for upserting httproute '%s'", reqnsn),
-		From:      &opcfgs,
-		To:        &npcfgs,
-		Partition: "cis-c-tenant",
-		Context:   ctx,
-	}
-
-	for _, dr := range drs {
-		pkg.PendingDeploys <- deployer.DeployRequest{
-			Meta:      dr.Meta,
-			From:      dr.From,
-			To:        dr.To,
-			Partition: dr.Partition,
-			Context:   ctx,
-		}
-	}
-
-	return ctrl.Result{}, nil
 }

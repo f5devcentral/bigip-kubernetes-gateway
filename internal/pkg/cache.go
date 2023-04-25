@@ -625,8 +625,8 @@ func (c *SIGCache) RGImpactedGatewayClasses(rg *gatewayv1beta1.ReferenceGrant) [
 	for _, hr := range hrs {
 		gws = append(gws, c._gatewayRefsOfHR(hr)...)
 	}
-	gws = UnifiedGateways(gws)
-	return ClassNamesOfGateways(gws)
+	gws = unifiedGateways(gws)
+	return classNamesOfGateways(gws)
 }
 
 func (c *SIGCache) NSImpactedGatewayClasses(ns *v1.Namespace) []string {
