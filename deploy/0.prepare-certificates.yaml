@@ -14,7 +14,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: my-selfsigned-ca
-  namespace: gateway-system
+  namespace: kube-system
 spec:
   isCA: true
   commonName: my-selfsigned-ca
@@ -33,7 +33,7 @@ apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   name: my-ca-issuer
-  namespace: gateway-system
+  namespace: kube-system
 spec:
   ca:
     secretName: root-secret
@@ -44,7 +44,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: serving-cert
-  namespace: gateway-system
+  namespace: kube-system
 spec:
   dnsNames:
   - bigip-kubernetes-gateway.kube-system.svc
