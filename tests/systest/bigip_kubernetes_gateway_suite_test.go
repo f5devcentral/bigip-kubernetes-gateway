@@ -2,13 +2,12 @@ package main_test
 
 import (
 	"context"
-	"embed"
 	"testing"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/tests/systest/helpers"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 )
 
 var (
@@ -45,28 +44,26 @@ var _ = BeforeSuite(func() {
 		sc.BIGIPConfig.Username, sc.BIGIPConfig.Password,
 		sc.BIGIPConfig.IPAddress, sc.BIGIPConfig.Port)
 	slog.Infof("initialized bigip helper")
+
+	for _, yaml := range []string{
+		"templates/basics/namespace.yaml",
+	} {
+		f, err := yamlBasics.Open(yaml)
+		Expect(err).To(Succeed())
+		cs, err := k8s.LoadAndRender(ctx, f, dataBasics)
+		Expect(err).To(Succeed())
+		Expect(k8s.Apply(ctx, *cs)).To(Succeed())
+	}
 })
 
-var _ = AfterSuite(func() {})
-
-var (
-	//go:embed templates/basics/*.yaml
-	yamlBasics embed.FS
-	dataBasics = map[string]interface{}{
-		"gatewayclass": map[string]interface{}{
-			"name": "bigip",
-		},
-		"gateway": map[string]interface{}{
-			"name":      "mygateway",
-			"ipAddress": "10.250.17.121",
-		},
-		"httproute": map[string]interface{}{
-			"name":     "myhttproute",
-			"hostname": "gateway.test.automation",
-		},
-		"service": map[string]interface{}{
-			"name":     "test-service",
-			"replicas": 3,
-		},
+var _ = AfterSuite(func() {
+	for _, yaml := range []string{
+		"templates/basics/namespace.yaml",
+	} {
+		f, err := yamlBasics.Open(yaml)
+		Expect(err).To(Succeed())
+		cs, err := k8s.LoadAndRender(ctx, f, dataBasics)
+		Expect(err).To(Succeed())
+		Expect(k8s.Delete(ctx, *cs)).To(Succeed())
 	}
-)
+})

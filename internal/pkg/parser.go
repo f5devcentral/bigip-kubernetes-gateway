@@ -226,20 +226,21 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 	}
 
 	// virtual
-	for _, addr := range gw.Spec.Addresses {
+	for i, addr := range gw.Spec.Addresses {
 		if *addr.Type == gatewayv1beta1.IPAddressType {
 			ipaddr := addr.Value
 			for _, listener := range gw.Spec.Listeners {
 				var profiles []interface{}
 				ipProtocol := ""
 
+				lsname := gwListenerName(gw, &listener)
+				vrname := fmt.Sprintf("%s.%d", gwListenerName(gw, &listener), i)
 				switch listener.Protocol {
 				case gatewayv1beta1.HTTPProtocolType:
 					profiles = []interface{}{map[string]string{"name": "http"}}
 					ipProtocol = "tcp"
 				case gatewayv1beta1.HTTPSProtocolType:
 					profiles = []interface{}{map[string]string{"name": "http"}}
-					lsname := gwListenerName(gw, &listener)
 					for _, scrt := range scrtmap[lsname] {
 						profiles = append(profiles, map[string]string{"name": tlsName(scrt)})
 					}
@@ -255,14 +256,13 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 				if ipProtocol == "" {
 					return map[string]interface{}{}, fmt.Errorf("ipProtocol not set in %s case", listener.Protocol)
 				}
-				destination := fmt.Sprintf("%s:%d", ipaddr, listener.Port)
+				destination := fmt.Sprintf("/%s/%s:%d", gw.Spec.GatewayClassName, ipaddr, listener.Port)
 				if utils.IsIpv6(ipaddr) {
-					destination = fmt.Sprintf("%s.%d", ipaddr, listener.Port)
+					destination = fmt.Sprintf("/%s/%s.%d", gw.Spec.GatewayClassName, ipaddr, listener.Port)
 				}
-				name := gwListenerName(gw, &listener)
 
-				rlt["ltm/virtual/"+name] = map[string]interface{}{
-					"name":        name,
+				rlt["ltm/virtual/"+vrname] = map[string]interface{}{
+					"name":        vrname,
 					"profiles":    profiles,
 					"ipProtocol":  ipProtocol,
 					"destination": destination,
@@ -278,8 +278,8 @@ func parseGateway(gw *gatewayv1beta1.Gateway) (map[string]interface{}, error) {
 					"icmpEcho":           "enabled",
 					"routeAdvertisement": "disabled",
 				}
-				if _, ok := irules[name]; ok {
-					rlt["ltm/virtual/"+name].(map[string]interface{})["rules"] = irules[name]
+				if _, ok := irules[lsname]; ok {
+					rlt["ltm/virtual/"+vrname].(map[string]interface{})["rules"] = irules[lsname]
 				}
 			}
 		} else {

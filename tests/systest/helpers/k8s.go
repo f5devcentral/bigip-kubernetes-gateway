@@ -159,7 +159,7 @@ func (k *K8SHelper) LoadAndRender(ctx context.Context, fs io.Reader, data map[st
 		slog.Errorf("failed to render: %s", err.Error())
 		return nil, err
 	} else {
-		slog.Tracef(s)
+		// slog.Infof(s)
 		return k.Loads(ctx, s)
 	}
 }

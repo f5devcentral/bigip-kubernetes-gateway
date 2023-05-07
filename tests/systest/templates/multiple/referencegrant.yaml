@@ -1,0 +1,15 @@
+---
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: myreferencegrant
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: abcd
+  to:
+    - group: ""
+      kind: Service
+      # name: test-service

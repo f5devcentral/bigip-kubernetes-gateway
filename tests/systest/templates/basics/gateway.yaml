@@ -7,9 +7,14 @@ metadata:
   name: {{ .gateway.name }}
 spec:
   gatewayClassName: {{ .gatewayclass.name }}
-  listeners:
-  - name: http
-    port: 80
-    protocol: HTTP
-  addresses:
-    - value: {{ .gateway.ipAddress }}
+  listeners: {{ range .gateway.listeners }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
+  {{ end }}
+  addresses: {{ range .gateway.ipAddresses }}
+    - value: {{ . }}
+  {{ end }}
