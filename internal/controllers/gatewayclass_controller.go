@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/google/uuid"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
+	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -63,8 +63,11 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	slog.Debugf("handling gatewayclass " + req.Name)
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			defer pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
-			return handleDeletingGatewayClass(lctx, req)
+			dctx := context.WithValue(lctx, deployer.CtxKey_DeletePartition, req.Name)
+			return ctrl.Result{}, pkg.DeployForEvent(dctx, []string{req.Name}, func() string {
+				pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
+				return "deleting gatewayclass " + req.Name
+			})
 		} else {
 			return ctrl.Result{}, err
 		}
@@ -92,115 +95,14 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// }
 
 		// upsert gatewayclass
-		defer pkg.ActiveSIGs.SetGatewayClass(&obj)
-		return handleUpsertingGatewayClass(lctx, &obj)
+		cctx := context.WithValue(lctx, deployer.CtxKey_CreatePartition, req.Name)
+		return ctrl.Result{}, pkg.DeployForEvent(cctx, []string{req.Name}, func() string {
+			pkg.ActiveSIGs.SetGatewayClass(&obj)
+			return "upserting gatewayclass " + req.Name
+		})
 	}
 }
 
 func (r *GatewayClassReconciler) GetResObject() client.Object {
 	return r.ObjectType
-}
-
-func handleDeletingGatewayClass(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	slog := utils.LogFromContext(ctx)
-	slog.Debugf("deleting gatewayclass " + req.Name)
-
-	gwc := pkg.ActiveSIGs.GetGatewayClass(req.Name)
-	if gwc == nil {
-		return ctrl.Result{}, nil
-	}
-	ocfgs := map[string]interface{}{}
-	// ocfgs, ncfgs := map[string]interface{}{}, map[string]interface{}{}
-	opcfgs, npcfgs := map[string]interface{}{}, map[string]interface{}{}
-	var err error
-
-	gws := pkg.ActiveSIGs.AttachedGateways(gwc)
-	if ocfgs, err = pkg.ParseGatewayRelatedForClass(gwc.Name, gws); err != nil {
-		return ctrl.Result{}, err
-	}
-	if opcfgs, err = pkg.ParseServicesRelatedForAll(); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
-
-	if npcfgs, err = pkg.ParseServicesRelatedForAll(); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	dctx := context.WithValue(ctx, deployer.CtxKey_DeletePartition, "yes")
-	pkg.PendingDeploys <- deployer.DeployRequest{
-		Meta:      fmt.Sprintf("clearing gateways for gatewayclass '%s'", req.Name),
-		From:      &ocfgs,
-		To:        nil,
-		Partition: req.Name,
-		Context:   dctx,
-	}
-
-	pkg.PendingDeploys <- deployer.DeployRequest{
-		Meta:      fmt.Sprintf("updating services for gatewayclass '%s'", req.Name),
-		From:      &opcfgs,
-		To:        &npcfgs,
-		Partition: "cis-c-tenant",
-		Context:   ctx,
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func handleUpsertingGatewayClass(ctx context.Context, obj *gatewayv1beta1.GatewayClass) (ctrl.Result, error) {
-	slog := utils.LogFromContext(ctx)
-
-	reqn := utils.Keyname(obj.Namespace, obj.Name)
-	slog.Debugf("upserting gatewayclass " + reqn)
-	ngwc := obj.DeepCopy()
-
-	if ngwc.Spec.ControllerName != gatewayv1beta1.GatewayController(pkg.ActiveSIGs.ControllerName) {
-		slog.Debugf("ignore this gwc " + reqn + " as its controllerName does not match " + pkg.ActiveSIGs.ControllerName)
-		return ctrl.Result{}, nil
-	}
-
-	ocfgs, ncfgs := map[string]interface{}{}, map[string]interface{}{}
-	opcfgs, npcfgs := map[string]interface{}{}, map[string]interface{}{}
-	var err error
-
-	if ogwc := pkg.ActiveSIGs.GetGatewayClass(reqn); ogwc != nil {
-		gws := pkg.ActiveSIGs.AttachedGateways(ogwc)
-		if ocfgs, err = pkg.ParseGatewayRelatedForClass(ogwc.Name, gws); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-	if opcfgs, err = pkg.ParseServicesRelatedForAll(); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	pkg.ActiveSIGs.SetGatewayClass(ngwc)
-
-	if npcfgs, err = pkg.ParseServicesRelatedForAll(); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	gws := pkg.ActiveSIGs.AttachedGateways(ngwc)
-	if ncfgs, err = pkg.ParseGatewayRelatedForClass(ngwc.Name, gws); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	pkg.PendingDeploys <- deployer.DeployRequest{
-		Meta:      fmt.Sprintf("refreshing services for gatewayclass '%s'", reqn),
-		From:      &opcfgs,
-		To:        &npcfgs,
-		Partition: "cis-c-tenant",
-		Context:   ctx,
-	}
-
-	cctx := context.WithValue(ctx, deployer.CtxKey_CreatePartition, "yes")
-	pkg.PendingDeploys <- deployer.DeployRequest{
-		Meta:      fmt.Sprintf("refreshing gateways for gatewayclass '%s'", reqn),
-		From:      &ocfgs,
-		To:        &ncfgs,
-		Partition: reqn,
-		Context:   cctx,
-	}
-
-	return ctrl.Result{}, nil
 }

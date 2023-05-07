@@ -131,7 +131,7 @@ func stringifyRGTo(rgt *gatewayv1beta1.ReferenceGrantTo, ns string) string {
 	return utils.Keyname(g, string(rgt.Kind), ns, n)
 }
 
-func UnifiedGateways(objs []*gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
+func unifiedGateways(objs []*gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
 
 	m := map[string]bool{}
 	rlt := []*gatewayv1beta1.Gateway{}
@@ -146,7 +146,7 @@ func UnifiedGateways(objs []*gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
 	return rlt
 }
 
-func ClassNamesOfGateways(gws []*gatewayv1beta1.Gateway) []string {
+func classNamesOfGateways(gws []*gatewayv1beta1.Gateway) []string {
 	rlt := []string{}
 
 	for _, gw := range gws {
