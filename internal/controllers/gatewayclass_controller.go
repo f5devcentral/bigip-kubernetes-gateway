@@ -63,6 +63,10 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	slog.Debugf("handling gatewayclass " + req.Name)
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
+			gwc := pkg.ActiveSIGs.GetGatewayClass(req.Name)
+			if gwc == nil {
+				return ctrl.Result{}, nil
+			}
 			dctx := context.WithValue(lctx, deployer.CtxKey_DeletePartition, req.Name)
 			return ctrl.Result{}, pkg.DeployForEvent(dctx, []string{req.Name}, func() string {
 				pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
@@ -73,6 +77,10 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	} else {
 		ngwc := obj.DeepCopy()
+		if ngwc.Spec.ControllerName != gatewayv1beta1.GatewayController(pkg.ActiveSIGs.ControllerName) {
+			slog.Debugf("ignore this gwc " + ngwc.Name + " as its controllerName does not match " + pkg.ActiveSIGs.ControllerName)
+			return ctrl.Result{}, nil
+		}
 
 		ngwc.Status.Conditions = []metav1.Condition{
 			{

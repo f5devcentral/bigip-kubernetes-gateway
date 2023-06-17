@@ -125,7 +125,7 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 
 		It("Check virtual server has been created on BigIP", func() {
 			kind, partition, subfolder := "ltm/virtual", partition, ""
-			name := fmt.Sprintf("gw.default.%s.https", tlsGatewayName)
+			name := fmt.Sprintf("gw.default.%s.https.0", tlsGatewayName)
 			Eventually(checkExist).WithContext(ctx).WithArguments(kind, name, partition, subfolder, bip.Exist).
 				WithTimeout(time.Second * 10).ProbeEvery(time.Millisecond * 500).
 				Should(BeTrue())
@@ -152,7 +152,7 @@ var _ = Describe("TLS TEST", Label("tls"), Ordered, func() {
 	When("TLS Gateway has been deleted from K8S", func() {
 		It("Check virtual server has been deleted from BigIP", func() {
 			kind, partition, subfolder := "ltm/virtual", partition, ""
-			name := fmt.Sprintf("gw.default.%s.https", tlsGatewayName)
+			name := fmt.Sprintf("gw.default.%s.https.0", tlsGatewayName)
 			Eventually(checkExist).WithContext(ctx).WithArguments(kind, name, partition, subfolder, bip.Exist).
 				WithTimeout(time.Second * 10).ProbeEvery(time.Millisecond * 500).
 				Should(BeFalse())
