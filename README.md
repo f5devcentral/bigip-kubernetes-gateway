@@ -1,6 +1,6 @@
 # bigip-kubernetes-gateway
 
-Integrating BIG-IP as implementation provider for SIGNetworks gateway.
+Integrating classic BIG-IP as implementation provider for SIGNetworks gateway.
 
 See https://gateway-api.f5se.io for more information.
 
