@@ -236,7 +236,7 @@ func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() 
 	}
 
 	for _, dr := range drs {
-		PendingDeploys <- *dr
+		PendingDeploys.Add(*dr)
 	}
 
 	return nil
