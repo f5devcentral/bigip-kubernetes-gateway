@@ -25,17 +25,22 @@ func (ns *Nodes) Set(n *v1.Node) error {
 
 	node := K8Node{Name: n.Name}
 
-	// calico
-	if _, ok := n.Annotations["projectcalico.org/IPv4Address"]; ok {
-		ipmask := n.Annotations["projectcalico.org/IPv4Address"]
-		ipaddr := strings.Split(ipmask, "/")[0]
-		node = K8Node{
-			Name:    n.Name,
-			IpAddr:  ipaddr,
-			NetType: "calico-underlay",
-			MacAddr: "",
+	cnitype := detectCNIType(n)
+	switch cnitype {
+	case "cilium":
+		addrs := n.Status.Addresses
+		ipaddr := ""
+		for _, addr := range addrs {
+			if addr.Type == v1.NodeInternalIP {
+				ipaddr = addr.Address
+				break
+			}
 		}
-	} else {
+		node.Name = n.Name
+		node.IpAddr = ipaddr
+		node.NetType = ""
+		node.MacAddr = ipv4ToMac(ipaddr)
+	case "flannel":
 		// flannel v4
 		if _, ok := n.Annotations["flannel.alpha.coreos.com/backend-data"]; ok {
 			macStr := n.Annotations["flannel.alpha.coreos.com/backend-data"]
@@ -65,6 +70,17 @@ func (ns *Nodes) Set(n *v1.Node) error {
 				node.MacAddrV6 = v6["VtepMAC"].(string)
 			}
 		}
+	case "calico":
+		ipmask := n.Annotations["projectcalico.org/IPv4Address"]
+		ipaddr := strings.Split(ipmask, "/")[0]
+		node = K8Node{
+			Name:    n.Name,
+			IpAddr:  ipaddr,
+			NetType: "calico-underlay",
+			MacAddr: "",
+		}
+	default:
+		return fmt.Errorf("unknown CNI type: %s for node %s", cnitype, n.Name)
 	}
 
 	NodeCache.mutex <- true

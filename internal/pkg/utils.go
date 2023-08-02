@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 
+	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	v1 "k8s.io/api/core/v1"
@@ -217,6 +218,15 @@ func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() 
 		}
 	}
 
+	// TODO: fix the issue:
+	//	2023/06/19 09:26:49.824036 [ERROR] [cd7c411d-e392-424f-8a76-be055f1286d2] \
+	//	failed to deploy partition cis-c-tenant: 400, {"code":400,"message":"0107082a:3: \
+	//	All objects must be removed from a partition (cis-c-tenant) before the partition may be removed, type ID (973)","errorStack":[],"apiError":3}
+
+	// TODO: fix the issue:
+	// 2023/06/19 09:17:39.572853 [ERROR] [a763bd16-498a-415a-89a3-f5fdf2aa5adf] \
+	//	failed to do deployment to https://10.250.15.109:443: 400, {"code":400,"message":"transaction failed:01070110:3: \
+	//	Node address '/cis-c-tenant/10.250.16.103' is referenced by a member of pool '/cis-c-tenant/default.dev-service'.","errorStack":[],"apiError":2}
 	drs["cis-c-tenant"] = &deployer.DeployRequest{
 		Meta:      fmt.Sprintf("Updating pools for event %s", meta),
 		From:      &opcfgs,
@@ -226,7 +236,7 @@ func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() 
 	}
 
 	for _, dr := range drs {
-		PendingDeploys <- *dr
+		PendingDeploys.Add(*dr)
 	}
 
 	return nil
@@ -290,4 +300,68 @@ func validateSecretType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind) 
 		return fmt.Errorf("not Secret type: '%s'", utils.Keyname(g, k))
 	}
 	return nil
+}
+
+// purgeCommonNodes tries to remove  nodes from Common if no reference.
+func purgeCommonNodes(ctx context.Context, ombs []interface{}) {
+	for _, bp := range BIGIPs {
+		bc := f5_bigip.BIGIPContext{Context: ctx, BIGIP: *bp}
+		slog := utils.LogFromContext(ctx)
+
+		for _, m := range ombs {
+			partition := m.(map[string]interface{})["partition"].(string)
+			if partition != "Common" {
+				continue
+			}
+			addr := m.(map[string]interface{})["address"].(string)
+			err := bc.Delete("ltm/node", addr, "Common", "")
+			if err != nil && !strings.Contains(err.Error(), "is referenced by a member of pool") {
+				slog.Warnf("cannot delete node %s: %s", addr, err.Error())
+			}
+		}
+	}
+}
+
+// // splitByPartition split the cfgs into a map of which keys are partitions
+// func splitByPartition(ctx context.Context, cfgs map[string]interface{}) map[string]interface{} {
+// 	partitions := map[string]map[string]map[string]interface{}{}
+// 	for fstr, fv := range cfgs {
+// 		for rstr, rv := range fv.(map[string]interface{}) {
+// 			pstr := "unknown"
+// 			if p, f := rv.(map[string]interface{})["partition"]; f {
+// 				pstr = p.(string)
+// 			}
+
+// 			if _, pok := partitions[pstr]; !pok {
+// 				partitions[pstr] = map[string]map[string]interface{}{}
+
+// 			}
+// 			if _, fok := partitions[pstr][fstr]; !fok {
+// 				partitions[pstr][fstr] = map[string]interface{}{}
+// 			}
+// 			partitions[pstr][fstr][rstr] = rv
+// 		}
+// 	}
+// 	rlt := map[string]interface{}{}
+// 	for p, v := range partitions {
+// 		rlt[p] = v
+// 	}
+// 	return rlt
+// }
+
+// filterCommonResources filter the 'Common' resources from cfgs
+func filterCommonResources(cfgs map[string]interface{}) map[string]interface{} {
+	rlt := map[string]interface{}{}
+	for fstr, fv := range cfgs {
+		if _, ok := rlt[fstr]; !ok {
+			rlt[fstr] = map[string]interface{}{}
+		}
+		for rstr, rv := range fv.(map[string]interface{}) {
+			if p, f := rv.(map[string]interface{})["partition"]; f && p == "Common" {
+				rlt[fstr].(map[string]interface{})[rstr] = rv
+				delete(cfgs[fstr].(map[string]interface{}), rstr)
+			}
+		}
+	}
+	return rlt
 }

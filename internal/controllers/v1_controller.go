@@ -192,13 +192,13 @@ func handleDeletingEndpoints(ctx context.Context, req ctrl.Request) (ctrl.Result
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- deployer.DeployRequest{
+		pkg.PendingDeploys.Add(deployer.DeployRequest{
 			Meta:      fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
 			From:      &opcfgs,
 			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
-		}
+		})
 
 	}
 
@@ -230,13 +230,13 @@ func handleUpsertingEndpoints(ctx context.Context, obj *v1.Endpoints) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- deployer.DeployRequest{
+		pkg.PendingDeploys.Add(deployer.DeployRequest{
 			Meta:      fmt.Sprintf("upserting endpoints '%s'", reqnsn),
 			From:      &opcfgs,
 			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
-		}
+		})
 	}
 
 	return ctrl.Result{}, nil
@@ -265,13 +265,13 @@ func handleDeletingService(ctx context.Context, req ctrl.Request) (ctrl.Result, 
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- deployer.DeployRequest{
+		pkg.PendingDeploys.Add(deployer.DeployRequest{
 			Meta:      fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
 			From:      &opcfgs,
 			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
-		}
+		})
 
 	}
 
@@ -304,13 +304,13 @@ func handleUpsertingService(ctx context.Context, obj *v1.Service) (ctrl.Result, 
 			return ctrl.Result{}, err
 		}
 
-		pkg.PendingDeploys <- deployer.DeployRequest{
+		pkg.PendingDeploys.Add(deployer.DeployRequest{
 			Meta:      fmt.Sprintf("upserting service '%s'", reqnsn),
 			From:      &opcfgs,
 			To:        &npcfgs,
 			Partition: "cis-c-tenant",
 			Context:   ctx,
-		}
+		})
 	}
 
 	return ctrl.Result{}, nil

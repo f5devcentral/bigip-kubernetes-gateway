@@ -101,3 +101,78 @@ func TestReferenceGrantFromTo_ops(t *testing.T) {
 		}
 	})
 }
+
+func Test_filterCommonResources(t *testing.T) {
+	type args struct {
+		cfgs map[string]interface{}
+	}
+	tests := []struct {
+		name string
+		args args
+		want map[string]interface{}
+		left map[string]interface{}
+	}{
+		{
+			name: "normal test",
+			args: args{
+				cfgs: map[string]interface{}{
+					"": map[string]interface{}{
+						"ltm/pool/a": map[string]interface{}{
+							"name":      "a",
+							"partition": "cis-c-tenant",
+						},
+						"ltm/pool/b": map[string]interface{}{
+							"name":      "b",
+							"partition": "Common",
+						},
+					},
+					"f": map[string]interface{}{
+						"ltm/pool/c": map[string]interface{}{
+							"name":      "c",
+							"partition": "cis-c-tenant",
+						},
+						"ltm/pool/d": map[string]interface{}{
+							"name":      "d",
+							"partition": "Common",
+						},
+					},
+				},
+			},
+			want: map[string]interface{}{
+				"": map[string]interface{}{
+					"ltm/pool/b": map[string]interface{}{
+						"name":      "b",
+						"partition": "Common",
+					},
+				},
+				"f": map[string]interface{}{
+					"ltm/pool/d": map[string]interface{}{
+						"name":      "d",
+						"partition": "Common",
+					},
+				},
+			},
+			left: map[string]interface{}{
+				"": map[string]interface{}{
+					"ltm/pool/a": map[string]interface{}{
+						"name":      "a",
+						"partition": "cis-c-tenant",
+					},
+				},
+				"f": map[string]interface{}{
+					"ltm/pool/c": map[string]interface{}{
+						"name":      "c",
+						"partition": "cis-c-tenant",
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := filterCommonResources(tt.args.cfgs); !reflect.DeepEqual(got, tt.want) || !reflect.DeepEqual(tt.args.cfgs, tt.left) {
+				t.Errorf("filterCommonResources() = %v, want %v, left %v", got, tt.want, tt.left)
+			}
+		})
+	}
+}

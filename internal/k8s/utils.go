@@ -2,6 +2,8 @@ package k8s
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	v1 "k8s.io/api/core/v1"
@@ -48,14 +50,14 @@ func FormatMembersFromServiceEndpoints(svc *v1.Service, eps *v1.Endpoints) ([]Sv
 					}
 					if k8no := NodeCache.Get(*addr.NodeName); k8no == nil {
 						return []SvcEpsMember{}, utils.RetryErrorf("%s not found yet", *addr.NodeName)
-					} else {
+					} else if k8no.NetType == "vxlan" {
 						if utils.IsIpv6(addr.IP) {
 							member.MacAddr = k8no.MacAddrV6
 						} else {
 							member.MacAddr = k8no.MacAddr
 						}
-						members = append(members, member)
 					}
+					members = append(members, member)
 				}
 			}
 		}
@@ -68,4 +70,37 @@ func FormatMembersFromServiceEndpoints(svc *v1.Service, eps *v1.Endpoints) ([]Sv
 	}
 
 	return members, nil
+}
+
+func detectCNIType(node *v1.Node) string {
+	kind := "unknown"
+
+	for _, c := range node.Status.Conditions {
+		if c.Reason == "CiliumIsUp" {
+			kind = "cilium"
+			break
+		}
+		if c.Reason == "CalicoIsUp" {
+			kind = "calico"
+			break
+		}
+		if c.Reason == "FlannelIsUp" {
+			kind = "flannel"
+			break
+		}
+	}
+	return kind
+}
+
+// Convert an IPV4 string to a fake MAC address.
+func ipv4ToMac(addr string) string {
+	ip := strings.Split(addr, ".")
+	if len(ip) != 4 {
+		return ""
+	}
+	var intIP [4]int
+	for i, val := range ip {
+		intIP[i], _ = strconv.Atoi(val)
+	}
+	return fmt.Sprintf("0a:0a:%02x:%02x:%02x:%02x", intIP[0], intIP[1], intIP[2], intIP[3])
 }
