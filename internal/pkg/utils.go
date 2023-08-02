@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
 	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
@@ -14,6 +15,24 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
+
+func init() {
+	ActiveSIGs = &SIGCache{
+		mutex:          sync.RWMutex{},
+		SyncedAtStart:  false,
+		ControllerName: "",
+		Gateway:        map[string]*gatewayv1beta1.Gateway{},
+		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
+		Endpoints:      map[string]*v1.Endpoints{},
+		Service:        map[string]*v1.Service{},
+		GatewayClass:   map[string]*gatewayv1beta1.GatewayClass{},
+		Namespace:      map[string]*v1.Namespace{},
+		ReferenceGrant: map[string]*gatewayv1beta1.ReferenceGrant{},
+		Secret:         map[string]*v1.Secret{},
+	}
+	refFromTo = &ReferenceGrantFromTo{}
+	LogLevel = utils.LogLevel_Type_INFO
+}
 
 func hrName(hr *gatewayv1beta1.HTTPRoute) string {
 	return strings.Join([]string{"hr", hr.Namespace, hr.Name}, ".")

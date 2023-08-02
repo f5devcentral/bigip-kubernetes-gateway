@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"sync"
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/k8s"
@@ -19,23 +18,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func init() {
-	ActiveSIGs = &SIGCache{
-		mutex:          sync.RWMutex{},
-		SyncedAtStart:  false,
-		ControllerName: "",
-		Gateway:        map[string]*gatewayv1beta1.Gateway{},
-		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
-		Endpoints:      map[string]*v1.Endpoints{},
-		Service:        map[string]*v1.Service{},
-		GatewayClass:   map[string]*gatewayv1beta1.GatewayClass{},
-		Namespace:      map[string]*v1.Namespace{},
-		ReferenceGrant: map[string]*gatewayv1beta1.ReferenceGrant{},
-		Secret:         map[string]*v1.Secret{},
-	}
-	refFromTo = &ReferenceGrantFromTo{}
-}
 
 func (c *SIGCache) SetNamespace(obj *v1.Namespace) {
 	c.mutex.Lock()
