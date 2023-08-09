@@ -123,7 +123,9 @@ func main() {
 		os.Exit(1)
 	}
 	pkg.LogLevel = cmdflags.LogLevel
+	pkg.DeployMethod = cmdflags.DeployMethod
 	pkg.PendingDeploys, pkg.DoneDeploys = deployer.Deployer(stopCh, pkg.BIGIPs)
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -218,47 +220,47 @@ func setupReconcilers(mgr manager.Manager) {
 		&controllers.GatewayClassReconciler{
 			ObjectType: &gatewayv1beta1.GatewayClass{},
 			Client:     mgr.GetClient(),
-			LogLevel:   cmdflags.LogLevel,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.GatewayReconciler{
 			ObjectType: &gatewayv1beta1.Gateway{},
 			Client:     mgr.GetClient(),
-			LogLevel:   cmdflags.LogLevel,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.HttpRouteReconciler{
 			ObjectType: &gatewayv1beta1.HTTPRoute{},
 			Client:     mgr.GetClient(),
-			LogLevel:   cmdflags.LogLevel,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.ReferenceGrantReconciler{
 			ObjectType: &gatewayv1beta1.ReferenceGrant{},
 			Client:     mgr.GetClient(),
-			LogLevel:   cmdflags.LogLevel,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.SecretReconciler{
 			ObjectType: &v1.Secret{},
 			Client:     mgr.GetClient(),
-			LogLevel:   cmdflags.LogLevel,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.EndpointsReconciler{
 			ObjectType: &v1.Endpoints{},
 			Client:     mgr.GetClient(),
-			LogLevel:   cmdflags.LogLevel,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.ServiceReconciler{
 			ObjectType: &v1.Service{},
 			Client:     mgr.GetClient(),
-			LogLevel:   cmdflags.LogLevel,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.NodeReconciler{
 			ObjectType: &v1.Node{},
 			Client:     mgr.GetClient(),
-			LogLevel:   cmdflags.LogLevel,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.NamespaceReconciler{
 			ObjectType: &v1.Namespace{},
 			Client:     mgr.GetClient(),
-			LogLevel:   cmdflags.LogLevel,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 	)
 	resources.StartReconcilers(mgr)

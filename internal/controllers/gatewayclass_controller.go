@@ -24,7 +24,6 @@ import (
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
-	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -35,7 +34,7 @@ import (
 type GatewayClassReconciler struct {
 	ObjectType client.Object
 	Client     client.Client
-	LogLevel   string
+	// LogLevel   string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -48,7 +47,7 @@ type GatewayClassReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
+	lctx := pkg.NewContext()
 	slog := utils.LogFromContext(lctx)
 	if req.Namespace != "" {
 		return ctrl.Result{}, fmt.Errorf("gateway class namespace must be ''")

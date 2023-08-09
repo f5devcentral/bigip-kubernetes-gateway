@@ -25,7 +25,6 @@ import (
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
-	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -35,25 +34,25 @@ import (
 type EndpointsReconciler struct {
 	ObjectType client.Object
 	Client     client.Client
-	LogLevel   string
+	// LogLevel   string
 }
 
 type ServiceReconciler struct {
 	ObjectType client.Object
 	Client     client.Client
-	LogLevel   string
+	// LogLevel   string
 }
 
 type NodeReconciler struct {
 	ObjectType client.Object
 	Client     client.Client
-	LogLevel   string
+	// LogLevel   string
 }
 
 type NamespaceReconciler struct {
 	ObjectType client.Object
 	Client     client.Client
-	LogLevel   string
+	// LogLevel   string
 }
 
 func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -64,7 +63,7 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	var obj v1.Namespace
 
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
+	lctx := pkg.NewContext()
 	slog := utils.LogFromContext(lctx)
 	slog.Debugf("Namespace event: " + req.Name)
 
@@ -99,7 +98,7 @@ func (r *NamespaceReconciler) GetResObject() client.Object {
 }
 
 func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
+	lctx := pkg.NewContext()
 	var obj v1.Endpoints
 	// // too many logs.
 	// slog.Debugf("endpoint event: " + req.NamespacedName.String())
@@ -123,7 +122,7 @@ func (r *EndpointsReconciler) GetResObject() client.Object {
 
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var obj v1.Service
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
+	lctx := pkg.NewContext()
 	slog := utils.LogFromContext(lctx)
 	slog.Debugf("Service event: " + req.NamespacedName.String())
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {

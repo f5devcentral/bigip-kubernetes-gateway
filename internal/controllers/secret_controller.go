@@ -23,7 +23,6 @@ import (
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
-	"github.com/google/uuid"
 	v1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,7 +31,7 @@ import (
 type SecretReconciler struct {
 	ObjectType client.Object
 	Client     client.Client
-	LogLevel   string
+	// LogLevel   string
 }
 
 func (r *SecretReconciler) GetResObject() client.Object {
@@ -45,7 +44,7 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
+	lctx := pkg.NewContext()
 	slog := utils.LogFromContext(lctx)
 
 	var obj v1.Secret

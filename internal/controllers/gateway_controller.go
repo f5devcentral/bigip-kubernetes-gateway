@@ -20,7 +20,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -33,7 +32,7 @@ import (
 type GatewayReconciler struct {
 	ObjectType client.Object
 	Client     client.Client
-	LogLevel   string
+	// LogLevel   string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -46,7 +45,7 @@ type GatewayReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
+	lctx := pkg.NewContext()
 	slog := utils.LogFromContext(lctx)
 	if !pkg.ActiveSIGs.SyncedAtStart {
 		<-time.After(100 * time.Millisecond)

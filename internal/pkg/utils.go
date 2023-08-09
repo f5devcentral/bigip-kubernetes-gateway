@@ -10,6 +10,7 @@ import (
 	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
+	"github.com/google/uuid"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -32,6 +33,7 @@ func init() {
 	}
 	refFromTo = &ReferenceGrantFromTo{}
 	LogLevel = utils.LogLevel_Type_INFO
+	DeployMethod = DeployMethod_AS3
 }
 
 func hrName(hr *gatewayv1beta1.HTTPRoute) string {
@@ -177,6 +179,16 @@ func classNamesOfGateways(gws []*gatewayv1beta1.Gateway) []string {
 }
 
 func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() string) error {
+	if DeployMethod == DeployMethod_REST {
+		return RestDeployForEvent(ctx, impactedClasses, apply)
+	} else if DeployMethod == DeployMethod_AS3 {
+		return AS3DeployForEvent(ctx, impactedClasses, apply)
+	} else {
+		return fmt.Errorf("invalid deployment method: %s", DeployMethod)
+	}
+}
+
+func RestDeployForEvent(ctx context.Context, impactedClasses []string, apply func() string) error {
 	if len(impactedClasses) == 0 {
 		apply()
 		return nil
@@ -257,6 +269,37 @@ func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() 
 	for _, dr := range drs {
 		PendingDeploys.Add(*dr)
 	}
+
+	return nil
+}
+
+func AS3DeployForEvent(ctx context.Context, impactedClasses []string, apply func() string) error {
+	if len(impactedClasses) == 0 {
+		apply()
+		return nil
+	}
+
+	ncfgs := map[string]interface{}{}
+	var err error
+	meta := apply()
+
+	for _, n := range impactedClasses {
+		if ncfgs[n], err = ParseAllForClass(n); err != nil {
+			return err
+		}
+	}
+	if ncfgs["cis-c-tenant"], err = ParseServicesRelatedForAll(); err != nil {
+		return err
+	}
+
+	as3 := restToAS3(ncfgs)
+
+	PendingDeploys.Add(deployer.DeployRequest{
+		Meta:    fmt.Sprintf("Operating on %s for event %s", impactedClasses, meta),
+		From:    nil,
+		To:      &as3,
+		Context: ctx,
+	})
 
 	return nil
 }
@@ -383,4 +426,62 @@ func filterCommonResources(cfgs map[string]interface{}) map[string]interface{} {
 		}
 	}
 	return rlt
+}
+
+func NewContext() context.Context {
+	reqid := uuid.New().String()
+	slog := utils.NewLog().WithLevel(LogLevel).WithRequestID(reqid)
+	ctxid := context.WithValue(context.TODO(), utils.CtxKey_RequestID, reqid)
+	ctx := context.WithValue(ctxid, utils.CtxKey_Logger, slog)
+	return ctx
+}
+
+func restToAS3(cfgs map[string]interface{}) map[string]interface{} {
+
+	as3 := map[string]interface{}{
+		"class":   "AS3",
+		"action":  "deploy",
+		"persist": false,
+	}
+
+	declarations := map[string]interface{}{
+		"class":         "ADC",
+		"schemaVersion": "3.19.0",
+	}
+
+	for p, cfg := range cfgs {
+		tenant := map[string]interface{}{
+			"class": "Tenant",
+		}
+		for k, v := range cfg.(map[string]interface{}) {
+			application := map[string]interface{}{
+				"class": "Application",
+			}
+			for tn, resource := range v.(map[string]interface{}) {
+				t, n := typeAndName(tn)
+				switch t {
+				case "net/arp": // skip this resource in as3 mode
+				case "ltm/node":
+				default:
+					application[n] = resource
+				}
+			}
+			tenant[k] = application
+		}
+		declarations[p] = tenant
+	}
+
+	as3["declaration"] = declarations
+
+	// b, _ := json.Marshal(as3)
+	// fmt.Printf("%s\n", string(b))
+	return as3
+}
+
+func typeAndName(s string) (string, string) {
+	a := strings.Split(s, "/")
+	l := len(a)
+	t := strings.Join(a[0:l-1], "/")
+	n := a[l-1]
+	return t, n
 }

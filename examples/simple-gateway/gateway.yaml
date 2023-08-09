@@ -15,5 +15,5 @@ spec:
       namespaces:
         from: All
   addresses:
-    - value: 10.250.17.143
+    - value: 10.250.16.240
 

@@ -197,7 +197,7 @@ func parsePoolweight(backends []gatewayv1beta1.HTTPBackendRef, hr *gatewayv1beta
 			continue
 		}
 		pn := strings.Join([]string{ns, string(br.Name)}, ".")
-		pool := fmt.Sprintf("/%s/%s", "cis-c-tenant", pn)
+		pool := fmt.Sprintf("/%s/serviceMain/%s", "cis-c-tenant", pn)
 		weight := 1
 		if br.Weight != nil {
 			weight = int(*br.Weight)
@@ -216,11 +216,20 @@ func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[str
 	}
 
 	name := hrName(hr)
-	ruleObj := map[string]interface{}{
-		"name":         name,
-		"apiAnonymous": tpl.String(),
+	if DeployMethod == DeployMethod_REST {
+		ruleObj := map[string]interface{}{
+			"name":         name,
+			"apiAnonymous": tpl.String(),
+		}
+
+		rlt["ltm/rule/"+name] = ruleObj
+	} else if DeployMethod == DeployMethod_AS3 {
+		ruleObj := map[string]interface{}{
+			"class": "iRule",
+			"iRule": tpl.String(),
+		}
+		rlt["ltm/rule/"+name] = ruleObj
 	}
 
-	rlt["ltm/rule/"+name] = ruleObj
 	return nil
 }
