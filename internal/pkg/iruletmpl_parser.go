@@ -209,27 +209,16 @@ func parsePoolweight(backends []gatewayv1beta1.HTTPBackendRef, hr *gatewayv1beta
 }
 
 func parseiRulesFrom(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
-
 	var tpl bytes.Buffer
 	if err := iruleTemplate.ExecuteTemplate(&tpl, "irule.tmpl", hr); err != nil {
 		return fmt.Errorf("cannot parse HttpRoute to iRule by template irule.tmpl")
 	}
 
 	name := hrName(hr)
-	if DeployMethod == DeployMethod_REST {
-		ruleObj := map[string]interface{}{
-			"name":         name,
-			"apiAnonymous": tpl.String(),
-		}
-
-		rlt["ltm/rule/"+name] = ruleObj
-	} else if DeployMethod == DeployMethod_AS3 {
-		ruleObj := map[string]interface{}{
-			"class": "iRule",
-			"iRule": tpl.String(),
-		}
-		rlt["ltm/rule/"+name] = ruleObj
+	ruleObj := map[string]interface{}{
+		"class": "iRule",
+		"iRule": tpl.String(),
 	}
-
+	rlt["ltm/rule/"+name] = ruleObj
 	return nil
 }

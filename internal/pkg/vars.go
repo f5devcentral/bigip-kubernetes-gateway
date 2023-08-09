@@ -14,10 +14,9 @@ var (
 	BIPPassword    string
 	refFromTo      *ReferenceGrantFromTo
 	LogLevel       string
-	DeployMethod   string
 )
 
-const (
-	DeployMethod_AS3  = "as3"
-	DeployMethod_REST = "rest"
-)
+// const (
+// 	DeployMethod_AS3  = "as3"
+// 	DeployMethod_REST = "rest"
+// )

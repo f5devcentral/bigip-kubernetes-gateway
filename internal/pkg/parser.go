@@ -53,11 +53,7 @@ func ParseAllForClass(className string) (map[string]interface{}, error) {
 	}
 
 	cgwObjs := ActiveSIGs.AttachedGateways(gwc)
-
-	folder := ""
-	if DeployMethod == DeployMethod_AS3 {
-		folder = "serviceMain"
-	}
+	folder := "serviceMain"
 
 	rlt := map[string]interface{}{}
 	for _, gw := range cgwObjs {
@@ -71,68 +67,71 @@ func ParseAllForClass(className string) (map[string]interface{}, error) {
 			}
 		}
 	}
-	return map[string]interface{}{
-		folder: rlt,
-	}, nil
+	if len(rlt) == 0 {
+		return nil, nil
+	} else {
+		return map[string]interface{}{
+			folder: rlt,
+		}, nil
+	}
+
 }
 
-// ParseServicesRelatedForAll parse all refered services
-func ParseServicesRelatedForAll() (map[string]interface{}, error) {
+// ParseRelatedServices parse all refered services
+func ParseClassRelatedServices(gwc []string) (map[string]interface{}, error) {
 
-	// all services that are referenced but may not exist
-	svcs := ActiveSIGs.AllAttachedServiceKeys()
+	svcs := []*v1.Service{}
+	for _, c := range gwc {
+		gc := ActiveSIGs.GetGatewayClass(c)
+		svcs = append(svcs, ActiveSIGs.RelatedServices(gc)...)
+	}
 
-	return ParseReferedServiceKeys(svcs)
-}
-
-func ParseReferedServiceKeys(svcs []string) (map[string]interface{}, error) {
-	rlt := map[string]interface{}{}
+	keys := []string{}
 	for _, svc := range svcs {
+		keys = append(keys, utils.Keyname(svc.Namespace, svc.Name))
+	}
+	return ParseServices(keys)
+}
 
+func ParseServices(svcs []string) (map[string]interface{}, error) {
+	rlts := map[string]interface{}{}
+	for _, svc := range svcs {
 		ns := strings.Split(svc, "/")[0]
 		n := strings.Split(svc, "/")[1]
 
-		name := strings.Join([]string{ns, n}, ".")
-		if DeployMethod == DeployMethod_REST {
-			rlt["ltm/pool/"+name] = map[string]interface{}{
-				"name":    name,
-				"monitor": "min 1 of tcp",
-				"members": []interface{}{},
-			}
-		} else if DeployMethod == DeployMethod_AS3 {
-			rlt["ltm/pool/"+name] = map[string]interface{}{
-				"class":    "Pool",
-				"monitors": []string{"tcp"},
-				"members":  []interface{}{},
+		if _, f := rlts[ns]; !f {
+			rlts[ns] = map[string]interface{}{
+				"serviceMain": map[string]interface{}{},
 			}
 		}
+		// name := strings.Join([]string{ns, n}, ".")
+		pool := map[string]interface{}{
+			"class":    "Pool",
+			"monitors": []string{"tcp"},
+			"members":  []interface{}{},
+		}
 		if fmtmbs, err := parseMembersFrom(ns, n); err != nil {
-			return rlt, err
+			return nil, err
 		} else {
-			rlt["ltm/pool/"+name].(map[string]interface{})["members"] = fmtmbs
+			pool["members"] = fmtmbs
 		}
 
 		if mon, err := parseMonitorFrom(ns, n); err != nil {
-			return rlt, err
+			return nil, err
 		} else {
-			if DeployMethod == DeployMethod_REST {
-				rlt["ltm/pool/"+name].(map[string]interface{})["monitor"] = mon
-			} else if DeployMethod == DeployMethod_AS3 {
-				rlt["ltm/pool/"+name].(map[string]interface{})["monitors"] = mon
-			}
+			pool["monitors"] = mon
 		}
 
-		if err := parseArpsFrom(ns, n, rlt); err != nil {
-			return rlt, err
-		}
-		if err := parseNodesFrom(ns, n, rlt); err != nil {
-			return rlt, err
-		}
+		// if err := parseArpsFrom(ns, n, rlt); err != nil {
+		// 	return rlt, err
+		// }
+		// if err := parseNodesFrom(ns, n, rlt); err != nil {
+		// 	return rlt, err
+		// }
+		rlts[ns].(map[string]interface{})["serviceMain"].(map[string]interface{})["ltm/pool/"+n] = pool
 	}
 
-	return map[string]interface{}{
-		"serviceMain": rlt,
-	}, nil
+	return rlts, nil
 }
 
 func parseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
@@ -172,31 +171,17 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 				irules[vsname] = []string{}
 			}
 			irules[vsname] = append(irules[vsname], vsname)
-			if DeployMethod == DeployMethod_REST {
-				rule := map[string]interface{}{
-					"name": vsname,
-					"apiAnonymous": fmt.Sprintf(`
+			rule := map[string]interface{}{
+				"class": "iRule",
+				"iRule": fmt.Sprintf(`
 						when HTTP_REQUEST {
 							if { not ([HTTP::host] matches "%s") } {
 								event HTTP_REQUEST disable
 							}
 						}
 					`, *listener.Hostname),
-				}
-				rlt["ltm/rule/"+vsname] = rule
-			} else if DeployMethod == DeployMethod_AS3 {
-				rule := map[string]interface{}{
-					"class": "iRule",
-					"iRule": fmt.Sprintf(`
-						when HTTP_REQUEST {
-							if { not ([HTTP::host] matches "%s") } {
-								event HTTP_REQUEST disable
-							}
-						}
-					`, *listener.Hostname),
-				}
-				rlt["ltm/rule/"+vsname] = rule
 			}
+			rlt["ltm/rule/"+vsname] = rule
 		}
 	}
 
@@ -240,36 +225,19 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 			for _, listener := range gw.Spec.Listeners {
 				// var profiles []interface{}
 				profiles := map[string]interface{}{}
-				ipProtocol := ""
 				virtual := map[string]interface{}{}
 
 				lsname := gwListenerName(gw, &listener)
 				vrname := fmt.Sprintf("%s.%d", gwListenerName(gw, &listener), i)
 				switch listener.Protocol {
 				case gatewayv1beta1.HTTPProtocolType:
-					// profiles = []interface{}{map[string]string{"name": "http"}}
-					if DeployMethod == DeployMethod_REST {
-						profiles["http"] = map[string]string{"name": "http"}
-						ipProtocol = "tcp"
-					} else if DeployMethod == DeployMethod_AS3 {
-						virtual["profileHTTP"] = "basic"
-						virtual["class"] = "Service_HTTP"
-					}
+					virtual["profileHTTP"] = "basic"
+					virtual["class"] = "Service_HTTP"
 				case gatewayv1beta1.HTTPSProtocolType:
-					if DeployMethod == DeployMethod_REST {
-						// profiles = []interface{}{map[string]string{"name": "http"}}
-						profiles["http"] = map[string]string{"name": "http"}
-						for _, scrt := range scrtmap[lsname] {
-							// profiles = append(profiles, map[string]string{"name": tlsName(scrt)})
-							profiles[tlsName(scrt)] = map[string]string{"name": tlsName(scrt)}
-						}
-						ipProtocol = "tcp"
-					} else if DeployMethod == DeployMethod_AS3 {
-						// class = "Service_HTTPS"
-						virtual["class"] = "Service_HTTPS"
-						virtual["profileHTTP"] = "basic"
-						profiles["serverTLS"] = lsname
-					}
+					// class = "Service_HTTPS"
+					virtual["class"] = "Service_HTTPS"
+					virtual["profileHTTP"] = "basic"
+					profiles["serverTLS"] = lsname
 				case gatewayv1beta1.TCPProtocolType:
 					return fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
 				case gatewayv1beta1.UDPProtocolType:
@@ -278,46 +246,11 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 					return fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
 				}
 
-				if DeployMethod == DeployMethod_REST {
-					if ipProtocol == "" {
-						return fmt.Errorf("ipProtocol not set in %s case", listener.Protocol)
-					}
-					destination := fmt.Sprintf("/%s/%s:%d", gw.Spec.GatewayClassName, ipaddr, listener.Port)
-					if utils.IsIpv6(ipaddr) {
-						destination = fmt.Sprintf("/%s/%s.%d", gw.Spec.GatewayClassName, ipaddr, listener.Port)
-					}
-
-					ps := []interface{}{}
-					for _, p := range profiles {
-						ps = append(ps, p)
-					}
-					rlt["ltm/virtual/"+vrname] = map[string]interface{}{
-						"name":        vrname,
-						"profiles":    ps,
-						"ipProtocol":  ipProtocol,
-						"destination": destination,
-						"sourceAddressTranslation": map[string]interface{}{
-							"type": "automap",
-						},
-						"rules": []interface{}{},
-					}
-					rlt["ltm/virtual-address/"+ipaddr] = map[string]interface{}{
-						"name":               ipaddr, // must be set: 403, {"code":403,"message":"Operation is not supported on component /ltm/virtual-address."
-						"address":            ipaddr,
-						"mask":               "255.255.255.255",
-						"icmpEcho":           "enabled",
-						"routeAdvertisement": "disabled",
-					}
-					if _, ok := irules[lsname]; ok {
-						rlt["ltm/virtual/"+vrname].(map[string]interface{})["rules"] = irules[lsname]
-					}
-				} else if DeployMethod == DeployMethod_AS3 {
-					virtual["virtualAddresses"] = []string{ipaddr}
-					virtual["virtualPort"] = listener.Port
-					virtual["iRules"] = irules[lsname]
-					virtual["snat"] = "auto"
-					rlt["ltm/virtual/"+vrname] = virtual
-				}
+				virtual["virtualAddresses"] = []string{ipaddr}
+				virtual["virtualPort"] = listener.Port
+				virtual["iRules"] = irules[lsname]
+				virtual["snat"] = "auto"
+				rlt["ltm/virtual/"+vrname] = virtual
 			}
 		} else {
 			return fmt.Errorf("unsupported AddressType: %s", *addr.Type)
@@ -329,12 +262,7 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 
 // TODO: find the way to set monitor
 func parseMonitorFrom(svcNamespace, svcName string) (interface{}, error) {
-	if DeployMethod == DeployMethod_REST {
-		return "min 1 of tcp", nil
-	} else if DeployMethod == DeployMethod_AS3 {
-		return []string{"tcp"}, nil
-	}
-	return nil, nil
+	return []string{"tcp"}, nil
 }
 
 func parseMembersFrom(svcNamespace, svcName string) ([]interface{}, error) {
@@ -347,21 +275,10 @@ func parseMembersFrom(svcNamespace, svcName string) ([]interface{}, error) {
 			fmtmbs := []interface{}{}
 
 			for _, mb := range mbs {
-				if DeployMethod == DeployMethod_REST {
-					sep := ":"
-					if utils.IsIpv6(mb.IpAddr) {
-						sep = "."
-					}
-					fmtmbs = append(fmtmbs, map[string]interface{}{
-						"name":    fmt.Sprintf("%s%s%d", mb.IpAddr, sep, mb.TargetPort),
-						"address": mb.IpAddr,
-					})
-				} else if DeployMethod == DeployMethod_AS3 {
-					fmtmbs = append(fmtmbs, map[string]interface{}{
-						"servicePort":     mb.TargetPort,
-						"serverAddresses": []string{mb.IpAddr},
-					})
-				}
+				fmtmbs = append(fmtmbs, map[string]interface{}{
+					"servicePort":     mb.TargetPort,
+					"serverAddresses": []string{mb.IpAddr},
+				})
 			}
 			return fmtmbs, nil
 		}
@@ -413,63 +330,28 @@ func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) er
 }
 
 func parseSecrets(lsname string, scrts []*v1.Secret, rlt map[string]interface{}) {
-	if DeployMethod == DeployMethod_REST {
-		for i, scrt := range scrts {
-			crtContent := string(scrt.Data[v1.TLSCertKey])
-			keyContent := string(scrt.Data[v1.TLSPrivateKeyKey])
+	certs := []interface{}{}
+	for i, scrt := range scrts {
+		crtContent := string(scrt.Data[v1.TLSCertKey])
+		keyContent := string(scrt.Data[v1.TLSPrivateKeyKey])
 
-			name := tlsName(scrt)
-			crtName := name + ".crt"
-			keyName := name + ".key"
+		name := tlsName(scrt)
 
-			rlt["shared/file-transfer/uploads/"+crtName] = map[string]any{
-				"content": crtContent,
-			}
-			rlt["shared/file-transfer/uploads/"+keyName] = map[string]any{
-				"content": keyContent,
-			}
-
-			rlt["sys/file/ssl-cert/"+crtName] = map[string]any{
-				"name":       crtName,
-				"sourcePath": "file:/var/config/rest/downloads/" + crtName,
-			}
-			rlt["sys/file/ssl-key/"+keyName] = map[string]any{
-				"name":       keyName,
-				"sourcePath": "file:/var/config/rest/downloads/" + keyName,
-				"passphrase": "",
-			}
-
-			rlt["ltm/profile/client-ssl/"+name] = map[string]any{
-				"name":       name,
-				"cert":       crtName,
-				"key":        keyName,
-				"sniDefault": i == 0,
-			}
+		rlt["sys/file/certificate/"+name] = map[string]interface{}{
+			"class":       "Certificate",
+			"certificate": crtContent,
+			"privateKey":  keyContent,
 		}
-	} else if DeployMethod == DeployMethod_AS3 {
-		certs := []interface{}{}
-		for i, scrt := range scrts {
-			crtContent := string(scrt.Data[v1.TLSCertKey])
-			keyContent := string(scrt.Data[v1.TLSPrivateKeyKey])
+		certs = append(certs, map[string]interface{}{
+			"certificate": name,
+			"sniDefault":  i == 0,
+		})
+	}
 
-			name := tlsName(scrt)
-
-			rlt["sys/file/certificate/"+name] = map[string]interface{}{
-				"class":       "Certificate",
-				"certificate": crtContent,
-				"privateKey":  keyContent,
-			}
-			certs = append(certs, map[string]interface{}{
-				"certificate": name,
-				"sniDefault":  i == 0,
-			})
-		}
-
-		if len(certs) > 0 {
-			rlt["ltm/profile/client-ssl/"+lsname] = map[string]interface{}{
-				"class":        "TLS_Server",
-				"certificates": certs,
-			}
+	if len(certs) > 0 {
+		rlt["ltm/profile/client-ssl/"+lsname] = map[string]interface{}{
+			"class":        "TLS_Server",
+			"certificates": certs,
 		}
 	}
 }

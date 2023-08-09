@@ -2,12 +2,12 @@ package pkg
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 
-	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	"github.com/google/uuid"
@@ -33,7 +33,6 @@ func init() {
 	}
 	refFromTo = &ReferenceGrantFromTo{}
 	LogLevel = utils.LogLevel_Type_INFO
-	DeployMethod = DeployMethod_AS3
 }
 
 func hrName(hr *gatewayv1beta1.HTTPRoute) string {
@@ -179,125 +178,42 @@ func classNamesOfGateways(gws []*gatewayv1beta1.Gateway) []string {
 }
 
 func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() string) error {
-	if DeployMethod == DeployMethod_REST {
-		return RestDeployForEvent(ctx, impactedClasses, apply)
-	} else if DeployMethod == DeployMethod_AS3 {
-		return AS3DeployForEvent(ctx, impactedClasses, apply)
-	} else {
-		return fmt.Errorf("invalid deployment method: %s", DeployMethod)
-	}
-}
+	slog := utils.LogFromContext(ctx)
 
-func RestDeployForEvent(ctx context.Context, impactedClasses []string, apply func() string) error {
-	if len(impactedClasses) == 0 {
-		apply()
-		return nil
-	}
-
-	ocfgs := map[string]interface{}{}
-	ncfgs := map[string]interface{}{}
-	opcfgs := map[string]interface{}{}
-	npcfgs := map[string]interface{}{}
-	var err error
-
-	preParsinng := func() error {
-		for _, n := range impactedClasses {
-			if ocfgs[n], err = ParseAllForClass(n); err != nil {
-				return err
-			}
-		}
-		if opcfgs, err = ParseServicesRelatedForAll(); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	postParsing := func() error {
-		for _, n := range impactedClasses {
-			if ncfgs[n], err = ParseAllForClass(n); err != nil {
-				return err
-			}
-		}
-		if npcfgs, err = ParseServicesRelatedForAll(); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	meta := ""
-	if err := preParsinng(); err != nil {
-		apply()
-		return err
-	} else {
-		meta = apply()
-		if err := postParsing(); err != nil {
-			return err
-		}
-	}
-
-	drs := map[string]*deployer.DeployRequest{}
-
-	for _, n := range impactedClasses {
-		ocfg := ocfgs[n].(map[string]interface{})
-		ncfg := ncfgs[n].(map[string]interface{})
-		drs[n] = &deployer.DeployRequest{
-			Meta:      fmt.Sprintf("Operating on %s for event %s", n, meta),
-			From:      &ocfg,
-			To:        &ncfg,
-			Partition: n,
-			Context:   ctx,
-		}
-	}
-
-	// TODO: fix the issue:
-	//	2023/06/19 09:26:49.824036 [ERROR] [cd7c411d-e392-424f-8a76-be055f1286d2] \
-	//	failed to deploy partition cis-c-tenant: 400, {"code":400,"message":"0107082a:3: \
-	//	All objects must be removed from a partition (cis-c-tenant) before the partition may be removed, type ID (973)","errorStack":[],"apiError":3}
-
-	// TODO: fix the issue:
-	// 2023/06/19 09:17:39.572853 [ERROR] [a763bd16-498a-415a-89a3-f5fdf2aa5adf] \
-	//	failed to do deployment to https://10.250.15.109:443: 400, {"code":400,"message":"transaction failed:01070110:3: \
-	//	Node address '/cis-c-tenant/10.250.16.103' is referenced by a member of pool '/cis-c-tenant/default.dev-service'.","errorStack":[],"apiError":2}
-	drs["cis-c-tenant"] = &deployer.DeployRequest{
-		Meta:      fmt.Sprintf("Updating pools for event %s", meta),
-		From:      &opcfgs,
-		To:        &npcfgs,
-		Partition: "cis-c-tenant",
-		Context:   ctx,
-	}
-
-	for _, dr := range drs {
-		PendingDeploys.Add(*dr)
-	}
-
-	return nil
-}
-
-func AS3DeployForEvent(ctx context.Context, impactedClasses []string, apply func() string) error {
-	if len(impactedClasses) == 0 {
-		apply()
-		return nil
-	}
-
-	ncfgs := map[string]interface{}{}
-	var err error
 	meta := apply()
+	if len(impactedClasses) == 0 {
+		return nil
+	}
+
+	ncfgs := map[string]interface{}{}
+	var err error
 
 	for _, n := range impactedClasses {
 		if ncfgs[n], err = ParseAllForClass(n); err != nil {
 			return err
 		}
 	}
-	if ncfgs["cis-c-tenant"], err = ParseServicesRelatedForAll(); err != nil {
+
+	if scfgs, err := ParseClassRelatedServices(impactedClasses); err != nil {
 		return err
+	} else {
+		for k, cfg := range scfgs {
+			ncfgs[k] = cfg
+		}
 	}
 
-	as3 := restToAS3(ncfgs)
+	as3 := RestToAS3(ncfgs)
+	if bas3, err := json.Marshal(as3); err != nil {
+		return err
+	} else {
+		slog.Debugf("as3 body: %s", bas3)
+	}
 
 	PendingDeploys.Add(deployer.DeployRequest{
 		Meta:    fmt.Sprintf("Operating on %s for event %s", impactedClasses, meta),
 		From:    nil,
 		To:      &as3,
+		AS3:     true,
 		Context: ctx,
 	})
 
@@ -365,24 +281,24 @@ func validateSecretType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind) 
 }
 
 // purgeCommonNodes tries to remove  nodes from Common if no reference.
-func purgeCommonNodes(ctx context.Context, ombs []interface{}) {
-	for _, bp := range BIGIPs {
-		bc := f5_bigip.BIGIPContext{Context: ctx, BIGIP: *bp}
-		slog := utils.LogFromContext(ctx)
+// func purgeCommonNodes(ctx context.Context, ombs []interface{}) {
+// 	for _, bp := range BIGIPs {
+// 		bc := f5_bigip.BIGIPContext{Context: ctx, BIGIP: *bp}
+// 		slog := utils.LogFromContext(ctx)
 
-		for _, m := range ombs {
-			partition := m.(map[string]interface{})["partition"].(string)
-			if partition != "Common" {
-				continue
-			}
-			addr := m.(map[string]interface{})["address"].(string)
-			err := bc.Delete("ltm/node", addr, "Common", "")
-			if err != nil && !strings.Contains(err.Error(), "is referenced by a member of pool") {
-				slog.Warnf("cannot delete node %s: %s", addr, err.Error())
-			}
-		}
-	}
-}
+// 		for _, m := range ombs {
+// 			partition := m.(map[string]interface{})["partition"].(string)
+// 			if partition != "Common" {
+// 				continue
+// 			}
+// 			addr := m.(map[string]interface{})["address"].(string)
+// 			err := bc.Delete("ltm/node", addr, "Common", "")
+// 			if err != nil && !strings.Contains(err.Error(), "is referenced by a member of pool") {
+// 				slog.Warnf("cannot delete node %s: %s", addr, err.Error())
+// 			}
+// 		}
+// 	}
+// }
 
 // // splitByPartition split the cfgs into a map of which keys are partitions
 // func splitByPartition(ctx context.Context, cfgs map[string]interface{}) map[string]interface{} {
@@ -436,7 +352,7 @@ func NewContext() context.Context {
 	return ctx
 }
 
-func restToAS3(cfgs map[string]interface{}) map[string]interface{} {
+func RestToAS3(cfgs map[string]interface{}) map[string]interface{} {
 
 	as3 := map[string]interface{}{
 		"class":   "AS3",
@@ -473,8 +389,8 @@ func restToAS3(cfgs map[string]interface{}) map[string]interface{} {
 
 	as3["declaration"] = declarations
 
-	// b, _ := json.Marshal(as3)
-	// fmt.Printf("%s\n", string(b))
+	b, _ := json.Marshal(as3)
+	fmt.Printf("In RestToAS3: %s\n", string(b))
 	return as3
 }
 
@@ -484,4 +400,34 @@ func typeAndName(s string) (string, string) {
 	t := strings.Join(a[0:l-1], "/")
 	n := a[l-1]
 	return t, n
+}
+
+func HandleBackends(ctx context.Context, namespace string) error {
+	svcs := ActiveSIGs.GetServicesWithNamespace(namespace)
+	kn := []string{}
+	for _, svc := range svcs {
+		for _, gw := range ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
+			if ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
+				kn = append(kn, utils.Keyname(svc.Namespace, svc.Name))
+			}
+		}
+	}
+
+	if len(kn) == 0 {
+		return nil
+	}
+
+	cfgs, err := ParseServices(kn)
+	if err != nil {
+		return err
+	} else {
+		as3 := RestToAS3(cfgs)
+		PendingDeploys.Add(deployer.DeployRequest{
+			Meta:    fmt.Sprintf("Deploying for '%s'", kn),
+			To:      &as3,
+			AS3:     true,
+			Context: ctx,
+		})
+	}
+	return nil
 }

@@ -18,12 +18,10 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/k8s"
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -104,15 +102,14 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// slog.Debugf("endpoint event: " + req.NamespacedName.String())
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			defer pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
-			return handleDeletingEndpoints(lctx, req)
+			pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
+			return ctrl.Result{}, pkg.HandleBackends(lctx, req.Namespace)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
-		eps := obj.DeepCopy()
-		defer pkg.ActiveSIGs.SetEndpoints(eps)
-		return handleUpsertingEndpoints(lctx, eps)
+		pkg.ActiveSIGs.SetEndpoints(obj.DeepCopy())
+		return ctrl.Result{}, pkg.HandleBackends(lctx, req.Namespace)
 	}
 }
 
@@ -127,15 +124,14 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	slog.Debugf("Service event: " + req.NamespacedName.String())
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			defer pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
-			return handleDeletingService(lctx, req)
+			pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
+			return ctrl.Result{}, pkg.HandleBackends(lctx, req.Namespace)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
-		svc := obj.DeepCopy()
-		defer pkg.ActiveSIGs.SetService(svc)
-		return handleUpsertingService(lctx, svc)
+		pkg.ActiveSIGs.SetService(obj.DeepCopy())
+		return ctrl.Result{}, pkg.HandleBackends(lctx, req.Namespace)
 	}
 }
 
@@ -166,151 +162,4 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 func (r *NodeReconciler) GetResObject() client.Object {
 	return r.ObjectType
-}
-
-func handleDeletingEndpoints(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
-	svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-
-	found := false
-	for _, gw := range pkg.ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
-		if pkg.ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
-			found = true
-			break
-		}
-	}
-	if found {
-		opcfgs, err := pkg.ParseReferedServiceKeys([]string{req.NamespacedName.String()})
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
-		npcfgs, err := pkg.ParseReferedServiceKeys([]string{req.NamespacedName.String()})
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		pkg.PendingDeploys.Add(deployer.DeployRequest{
-			Meta:      fmt.Sprintf("deleting endpoints '%s'", req.NamespacedName.String()),
-			From:      &opcfgs,
-			To:        &npcfgs,
-			Partition: "cis-c-tenant",
-			Context:   ctx,
-		})
-
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func handleUpsertingEndpoints(ctx context.Context, obj *v1.Endpoints) (ctrl.Result, error) {
-
-	reqnsn := utils.Keyname(obj.Namespace, obj.Name)
-	svc := pkg.ActiveSIGs.GetService(reqnsn)
-
-	found := false
-	for _, gw := range pkg.ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
-		if pkg.ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
-			found = true
-			break
-		}
-	}
-
-	if found {
-		opcfgs, err := pkg.ParseReferedServiceKeys([]string{reqnsn})
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		pkg.ActiveSIGs.SetEndpoints(obj.DeepCopy())
-		npcfgs, err := pkg.ParseReferedServiceKeys([]string{reqnsn})
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		pkg.PendingDeploys.Add(deployer.DeployRequest{
-			Meta:      fmt.Sprintf("upserting endpoints '%s'", reqnsn),
-			From:      &opcfgs,
-			To:        &npcfgs,
-			Partition: "cis-c-tenant",
-			Context:   ctx,
-		})
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func handleDeletingService(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
-	svc := pkg.ActiveSIGs.GetService(req.NamespacedName.String())
-
-	found := false
-	for _, gw := range pkg.ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
-		if pkg.ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
-			found = true
-			break
-		}
-	}
-	if found {
-		opcfgs, err := pkg.ParseReferedServiceKeys([]string{req.NamespacedName.String()})
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		pkg.ActiveSIGs.UnsetService(req.NamespacedName.String())
-		npcfgs, err := pkg.ParseReferedServiceKeys([]string{req.NamespacedName.String()})
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		pkg.PendingDeploys.Add(deployer.DeployRequest{
-			Meta:      fmt.Sprintf("deleting service '%s'", req.NamespacedName.String()),
-			From:      &opcfgs,
-			To:        &npcfgs,
-			Partition: "cis-c-tenant",
-			Context:   ctx,
-		})
-
-	}
-
-	return ctrl.Result{}, nil
-
-}
-
-func handleUpsertingService(ctx context.Context, obj *v1.Service) (ctrl.Result, error) {
-
-	reqnsn := utils.Keyname(obj.Namespace, obj.Name)
-	svc := pkg.ActiveSIGs.GetService(reqnsn)
-
-	found := false
-	for _, gw := range pkg.ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
-		if pkg.ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
-			found = true
-			break
-		}
-	}
-
-	if found {
-		opcfgs, err := pkg.ParseReferedServiceKeys([]string{reqnsn})
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		pkg.ActiveSIGs.SetService(obj.DeepCopy())
-		npcfgs, err := pkg.ParseReferedServiceKeys([]string{reqnsn})
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		pkg.PendingDeploys.Add(deployer.DeployRequest{
-			Meta:      fmt.Sprintf("upserting service '%s'", reqnsn),
-			From:      &opcfgs,
-			To:        &npcfgs,
-			Partition: "cis-c-tenant",
-			Context:   ctx,
-		})
-	}
-
-	return ctrl.Result{}, nil
 }

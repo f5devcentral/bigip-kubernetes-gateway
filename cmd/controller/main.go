@@ -123,7 +123,6 @@ func main() {
 		os.Exit(1)
 	}
 	pkg.LogLevel = cmdflags.LogLevel
-	pkg.DeployMethod = cmdflags.DeployMethod
 	pkg.PendingDeploys, pkg.DoneDeploys = deployer.Deployer(stopCh, pkg.BIGIPs)
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
