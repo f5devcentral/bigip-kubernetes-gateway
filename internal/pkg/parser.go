@@ -223,8 +223,6 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 		if *addr.Type == gatewayv1beta1.IPAddressType {
 			ipaddr := addr.Value
 			for _, listener := range gw.Spec.Listeners {
-				// var profiles []interface{}
-				profiles := map[string]interface{}{}
 				virtual := map[string]interface{}{}
 
 				lsname := gwListenerName(gw, &listener)
@@ -234,10 +232,9 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 					virtual["profileHTTP"] = "basic"
 					virtual["class"] = "Service_HTTP"
 				case gatewayv1beta1.HTTPSProtocolType:
-					// class = "Service_HTTPS"
 					virtual["class"] = "Service_HTTPS"
 					virtual["profileHTTP"] = "basic"
-					profiles["serverTLS"] = lsname
+					virtual["serverTLS"] = lsname
 				case gatewayv1beta1.TCPProtocolType:
 					return fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
 				case gatewayv1beta1.UDPProtocolType:
@@ -331,7 +328,7 @@ func parseMembersFrom(svcNamespace, svcName string) ([]interface{}, error) {
 
 func parseSecrets(lsname string, scrts []*v1.Secret, rlt map[string]interface{}) {
 	certs := []interface{}{}
-	for i, scrt := range scrts {
+	for _, scrt := range scrts {
 		crtContent := string(scrt.Data[v1.TLSCertKey])
 		keyContent := string(scrt.Data[v1.TLSPrivateKeyKey])
 
@@ -344,7 +341,7 @@ func parseSecrets(lsname string, scrts []*v1.Secret, rlt map[string]interface{})
 		}
 		certs = append(certs, map[string]interface{}{
 			"certificate": name,
-			"sniDefault":  i == 0,
+			// "sniDefault":  i == 0,
 		})
 	}
 

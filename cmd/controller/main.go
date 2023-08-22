@@ -122,7 +122,9 @@ func main() {
 		os.Exit(1)
 	}
 	pkg.LogLevel = cmdflags.LogLevel
-	pkg.PendingDeploys, pkg.DoneDeploys = pkg.AS3Deployer(stopCh, pkg.BIGIPs)
+	pkg.PendingDeploys, pkg.DoneDeploys = utils.NewDeployQueue(), utils.NewDeployQueue()
+	go pkg.AS3Deployer(stopCh, pkg.BIGIPs)
+	go pkg.RespHandler(stopCh)
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{

@@ -203,8 +203,8 @@ func DeployForEvent(ctx context.Context, impactedClasses []string) error {
 	}
 
 	as3 := RestToAS3(ncfgs)
+
 	PendingDeploys.Add(deployer.DeployRequest{
-		// Meta:    fmt.Sprintf("Operating on %s for event %s", impactedClasses, meta),
 		From:    nil,
 		To:      &as3,
 		AS3:     true,
@@ -382,9 +382,6 @@ func RestToAS3(cfgs map[string]interface{}) map[string]interface{} {
 	}
 
 	as3["declaration"] = declarations
-
-	b, _ := json.Marshal(as3)
-	fmt.Printf("In RestToAS3: %s\n", string(b))
 	return as3
 }
 
@@ -397,6 +394,8 @@ func typeAndName(s string) (string, string) {
 }
 
 func HandleBackends(ctx context.Context, namespace string) error {
+	// slog := utils.LogFromContext(ctx)
+
 	svcs := ActiveSIGs.GetServicesWithNamespace(namespace)
 	kn := []string{}
 	for _, svc := range svcs {
@@ -419,8 +418,8 @@ func HandleBackends(ctx context.Context, namespace string) error {
 	}
 
 	as3 := RestToAS3(cfgs)
+
 	PendingDeploys.Add(deployer.DeployRequest{
-		Meta:    fmt.Sprintf("Deploying for namespace %s, '%s'", namespace, kn),
 		To:      &as3,
 		AS3:     true,
 		Context: ctx,
@@ -429,97 +428,131 @@ func HandleBackends(ctx context.Context, namespace string) error {
 	return nil
 }
 
-func AS3Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) (*utils.DeployQueue, *utils.DeployQueue) {
-	pending, done := utils.NewDeployQueue(), utils.NewDeployQueue()
+// AS3Deployer starts a goroutine for accepting DeployRequests and deploy them via AS3.
+func AS3Deployer(stopCh chan struct{}, bigips []*f5_bigip.BIGIP) {
 	tenantCache := map[string]interface{}{}
-	go func() {
-		for {
-			select {
-			case <-stopCh:
-				return
-			default:
-				r := pending.Get().(deployer.DeployRequest)
-				as3body := *(r.To)
+	handleNext := func() {
+		// block getting from queue
+		r := PendingDeploys.Get().(deployer.DeployRequest)
 
-				l := pending.Len()
-				for i := 0; i < l; i++ {
-					m := pending.Get().(deployer.DeployRequest)
-					slog := utils.LogFromContext(m.Context)
+		as3body := *(r.To)
+		slog := utils.LogFromContext(r.Context)
 
-					tenants := (*m.To)["declaration"].(map[string]interface{})
-					ks := []string{}
-					for k, t := range tenants {
-						if reflect.TypeOf(t).Kind().String() == "map" {
-							// slog.Debugf("adding tenant: %s", k)
-							ks = append(ks, k)
-						}
-						as3body["declaration"].(map[string]interface{})[k] = t
-					}
-					slog.Infof("merged into %s: tenants: %s", utils.RequestIdFromContext(r.Context), ks)
+		// combine all requests from the queue
+		l := PendingDeploys.Len()
+		ids, ks := []string{}, []string{}
+		for i := 0; i < l; i++ {
+			m := PendingDeploys.Get().(deployer.DeployRequest)
+
+			tenants := (*m.To)["declaration"].(map[string]interface{})
+			for k, t := range tenants {
+				if reflect.TypeOf(t).Kind().String() == "map" {
+					// slog.Debugf("adding tenant: %s", k)
+					ks = append(ks, k)
+				}
+				as3body["declaration"].(map[string]interface{})[k] = t
+			}
+			ids = append(ids, utils.RequestIdFromContext(m.Context))
+		}
+		if len(ids) > 0 {
+			slog.Infof("merged requests %s: tenants: %s", ids, utils.Unified(ks))
+		}
+
+		// eliminate duplicate requests
+		for k, t := range as3body["declaration"].(map[string]interface{}) {
+			if reflect.TypeOf(t).Kind().String() != "map" {
+				continue
+			}
+			class, f := t.(map[string]interface{})["class"]
+			if !f || class != "Tenant" {
+				continue
+			}
+
+			if oldt, f := tenantCache[k]; f && utils.DeepEqual(oldt, t) {
+				delete(as3body["declaration"].(map[string]interface{}), k)
+			}
+		}
+
+		// check if there's necessary to do the as3 deployment.
+		found := false
+		for _, t := range as3body["declaration"].(map[string]interface{}) {
+			if reflect.TypeOf(t).Kind().String() != "map" {
+				continue
+			}
+			class, f := t.(map[string]interface{})["class"]
+			if !f || class != "Tenant" {
+				continue
+			}
+			found = true
+			break
+		}
+		// if yes
+		if found {
+			// debug the as3 body
+			r.To = &as3body
+			slog := utils.LogFromContext(r.Context)
+			b, _ := json.Marshal(as3body)
+			slog.Debugf("Deployed AS3: %s", string(b))
+
+			// do as3 deployment for every BIG-IP instance.
+			errs := []error{}
+			for _, bip := range bigips {
+				bc := &f5_bigip.BIGIPContext{Context: r.Context, BIGIP: *bip}
+				err := deployer.HandleRequest(bc, r)
+				DoneDeploys.Add(deployer.DeployResponse{
+					DeployRequest: r,
+					Status:        err,
+				})
+				errs = append(errs, err)
+			}
+
+			// if deployed successfully, update tenantCache to avoid duplicate request
+			for k, t := range as3body["declaration"].(map[string]interface{}) {
+				if reflect.TypeOf(t).Kind().String() != "map" {
+					continue
+				}
+				class, f := t.(map[string]interface{})["class"]
+				if !f || class != "Tenant" {
+					continue
 				}
 
-				for k, t := range as3body["declaration"].(map[string]interface{}) {
-					if reflect.TypeOf(t).Kind().String() != "map" {
-						continue
-					}
-					class, f := t.(map[string]interface{})["class"]
-					if !f || class != "Tenant" {
-						continue
-					}
-
-					if oldt, f := tenantCache[k]; f && utils.DeepEqual(oldt, t) {
-						delete(as3body["declaration"].(map[string]interface{}), k)
-					}
-				}
-
-				found := false
-				for _, t := range as3body["declaration"].(map[string]interface{}) {
-					if reflect.TypeOf(t).Kind().String() != "map" {
-						continue
-					}
-					class, f := t.(map[string]interface{})["class"]
-					if !f || class != "Tenant" {
-						continue
-					}
-					found = true
-					break
-				}
-				if found {
-					r.To = &as3body
-
-					errs := []error{}
-					for _, bip := range bigips {
-						bc := &f5_bigip.BIGIPContext{Context: r.Context, BIGIP: *bip}
-						err := deployer.HandleRequest(bc, r)
-						done.Add(deployer.DeployResponse{
-							DeployRequest: r,
-							Status:        err,
-						})
-						errs = append(errs, err)
-					}
-
-					for k, t := range as3body["declaration"].(map[string]interface{}) {
-						if reflect.TypeOf(t).Kind().String() != "map" {
-							continue
-						}
-						class, f := t.(map[string]interface{})["class"]
-						if !f || class != "Tenant" {
-							continue
-						}
-
-						if oldt, f := tenantCache[k]; !f || !utils.DeepEqual(oldt, t) {
-							if utils.MergeErrors(errs) == nil {
-								tenantCache[k] = t
-							} else {
-								delete(tenantCache, k)
-							}
-						}
+				if oldt, f := tenantCache[k]; !f || !utils.DeepEqual(oldt, t) {
+					if utils.MergeErrors(errs) == nil {
+						tenantCache[k] = t
+					} else {
+						delete(tenantCache, k)
 					}
 				}
 			}
 		}
-	}()
+	}
 
-	return pending, done
+	for {
+		select {
+		case <-stopCh:
+			return
+		default:
+			handleNext()
+		}
+	}
+}
 
+func RespHandler(stopCh chan struct{}) {
+	handleNext := func() {
+		r := DoneDeploys.Get().(deployer.DeployResponse)
+		slog := utils.LogFromContext(r.Context)
+		if r.Status != nil {
+			slog.Errorf(r.Status.Error())
+		} else {
+			slog.Infof("done request handling.")
+		}
+	}
+	for {
+		select {
+		case <-stopCh:
+			return
+		default:
+			handleNext()
+		}
+	}
 }
