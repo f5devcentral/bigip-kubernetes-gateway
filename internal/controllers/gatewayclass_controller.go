@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
-	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -66,11 +65,8 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			if gwc == nil {
 				return ctrl.Result{}, nil
 			}
-			dctx := context.WithValue(lctx, deployer.CtxKey_DeletePartition, req.Name)
-			return ctrl.Result{}, pkg.DeployForEvent(dctx, []string{req.Name}, func() string {
-				pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
-				return "deleting gatewayclass " + req.Name
-			})
+			pkg.ActiveSIGs.UnsetGatewayClass(req.Name)
+			return ctrl.Result{}, pkg.DeployForEvent(lctx, []string{req.Name})
 		} else {
 			return ctrl.Result{}, err
 		}
@@ -102,11 +98,8 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// }
 
 		// upsert gatewayclass
-		cctx := context.WithValue(lctx, deployer.CtxKey_CreatePartition, req.Name)
-		return ctrl.Result{}, pkg.DeployForEvent(cctx, []string{req.Name}, func() string {
-			pkg.ActiveSIGs.SetGatewayClass(&obj)
-			return "upserting gatewayclass " + req.Name
-		})
+		pkg.ActiveSIGs.SetGatewayClass(&obj)
+		return ctrl.Result{}, pkg.DeployForEvent(lctx, []string{req.Name})
 	}
 }
 

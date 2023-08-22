@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
@@ -85,11 +84,8 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			cls = append(cls, string(gw.Spec.GatewayClassName))
 		}
 
-		apply := func() string {
-			pkg.ActiveSIGs.SetSecret(obj.DeepCopy())
-			return fmt.Sprintf("upserting secret %s", req.NamespacedName.String())
-		}
-		if err := pkg.DeployForEvent(lctx, cls, apply); err != nil {
+		pkg.ActiveSIGs.SetSecret(obj.DeepCopy())
+		if err := pkg.DeployForEvent(lctx, cls); err != nil {
 			return ctrl.Result{}, err
 		}
 

@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
@@ -55,10 +54,8 @@ func (r *ReferenceGrantReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			// delete resources
 			rg := pkg.ActiveSIGs.GetReferenceGrant(keyname)
 			classNames := pkg.ActiveSIGs.RGImpactedGatewayClasses(rg)
-			if err := pkg.DeployForEvent(lctx, classNames, func() string {
-				pkg.ActiveSIGs.UnsetReferenceGrant(keyname)
-				return fmt.Sprintf("deleting referencegrant %s", keyname)
-			}); err != nil {
+			pkg.ActiveSIGs.UnsetReferenceGrant(keyname)
+			if err := pkg.DeployForEvent(lctx, classNames); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				return ctrl.Result{}, nil
@@ -73,10 +70,8 @@ func (r *ReferenceGrantReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		ocls := pkg.ActiveSIGs.RGImpactedGatewayClasses(org)
 		ncls := pkg.ActiveSIGs.RGImpactedGatewayClasses(nrg)
 		clss := utils.Unified(append(ocls, ncls...))
-		if err := pkg.DeployForEvent(lctx, clss, func() string {
-			pkg.ActiveSIGs.SetReferenceGrant(nrg)
-			return fmt.Sprintf("upserting referencegrant %s", keyname)
-		}); err != nil {
+		pkg.ActiveSIGs.SetReferenceGrant(nrg)
+		if err := pkg.DeployForEvent(lctx, clss); err != nil {
 			return ctrl.Result{}, nil
 		} else {
 			return ctrl.Result{}, err

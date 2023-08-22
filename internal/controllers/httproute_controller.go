@@ -63,10 +63,8 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			for _, gw := range gws {
 				cls = append(cls, string(gw.Spec.GatewayClassName))
 			}
-			return ctrl.Result{}, pkg.DeployForEvent(lctx, cls, func() string {
-				pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
-				return "deleting httproute " + req.NamespacedName.String()
-			})
+			pkg.ActiveSIGs.UnsetHTTPRoute(req.NamespacedName.String())
+			return ctrl.Result{}, pkg.DeployForEvent(lctx, cls)
 		} else {
 			return ctrl.Result{}, err
 		}
@@ -81,10 +79,8 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			cls = append(cls, string(gw.Spec.GatewayClassName))
 		}
 		cls = utils.Unified(cls)
-		return ctrl.Result{}, pkg.DeployForEvent(lctx, cls, func() string {
-			pkg.ActiveSIGs.SetHTTPRoute(&obj)
-			return "upserting httproute " + req.NamespacedName.String()
-		})
+		pkg.ActiveSIGs.SetHTTPRoute(&obj)
+		return ctrl.Result{}, pkg.DeployForEvent(lctx, cls)
 	}
 }
 

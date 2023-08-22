@@ -59,10 +59,8 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			// delete resources
 			gw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
 			cls := string(gw.Spec.GatewayClassName)
-			if err := pkg.DeployForEvent(lctx, []string{cls}, func() string {
-				pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
-				return "deleting gateway " + req.NamespacedName.String()
-			}); err != nil {
+			pkg.ActiveSIGs.UnsetGateway(req.NamespacedName.String())
+			if err := pkg.DeployForEvent(lctx, []string{cls}); err != nil {
 				return ctrl.Result{}, err
 			} else {
 				return ctrl.Result{}, nil
@@ -72,17 +70,15 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	} else {
 		// upsert resources
-		apply := func() string {
-			pkg.ActiveSIGs.SetGateway(&obj)
-			return "upserting gateway " + req.NamespacedName.String()
-		}
+		pkg.ActiveSIGs.SetGateway(&obj)
+
 		gw := pkg.ActiveSIGs.GetGateway(req.NamespacedName.String())
 		cls := []string{string(obj.Spec.GatewayClassName)}
 		if gw != nil {
 			cls = append(cls, string(gw.Spec.GatewayClassName))
 		}
 		cls = utils.Unified(cls)
-		if err := pkg.DeployForEvent(lctx, cls, apply); err != nil {
+		if err := pkg.DeployForEvent(lctx, cls); err != nil {
 			return ctrl.Result{}, err
 		} else {
 			return ctrl.Result{}, nil

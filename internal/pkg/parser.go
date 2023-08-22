@@ -11,37 +11,37 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
-	defer utils.TimeItToPrometheus()()
+// func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
+// 	defer utils.TimeItToPrometheus()()
 
-	if gwc := ActiveSIGs.GetGatewayClass(className); gwc == nil ||
-		gwc.Spec.ControllerName != gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
-		return map[string]interface{}{}, nil
-	}
+// 	if gwc := ActiveSIGs.GetGatewayClass(className); gwc == nil ||
+// 		gwc.Spec.ControllerName != gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
+// 		return map[string]interface{}{}, nil
+// 	}
 
-	cgwObjs := []*gatewayv1beta1.Gateway{}
-	for _, gw := range gwObjs {
-		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(className) {
-			cgwObjs = append(cgwObjs, gw)
-		}
-	}
+// 	cgwObjs := []*gatewayv1beta1.Gateway{}
+// 	for _, gw := range gwObjs {
+// 		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(className) {
+// 			cgwObjs = append(cgwObjs, gw)
+// 		}
+// 	}
 
-	rlt := map[string]interface{}{}
-	for _, gw := range cgwObjs {
-		if err := parseGateway(gw, rlt); err != nil {
-			return map[string]interface{}{}, err
-		}
-		hrs := ActiveSIGs.AttachedHTTPRoutes(gw)
-		for _, hr := range hrs {
-			if err := parseHTTPRoute(className, hr, rlt); err != nil {
-				return map[string]interface{}{}, err
-			}
-		}
-	}
-	return map[string]interface{}{
-		"": rlt,
-	}, nil
-}
+// 	rlt := map[string]interface{}{}
+// 	for _, gw := range cgwObjs {
+// 		if err := parseGateway(gw, rlt); err != nil {
+// 			return map[string]interface{}{}, err
+// 		}
+// 		hrs := ActiveSIGs.AttachedHTTPRoutes(gw)
+// 		for _, hr := range hrs {
+// 			if err := parseHTTPRoute(className, hr, rlt); err != nil {
+// 				return map[string]interface{}{}, err
+// 			}
+// 		}
+// 	}
+// 	return map[string]interface{}{
+// 		"": rlt,
+// 	}, nil
+// }
 
 func ParseAllForClass(className string) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
@@ -223,8 +223,6 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 		if *addr.Type == gatewayv1beta1.IPAddressType {
 			ipaddr := addr.Value
 			for _, listener := range gw.Spec.Listeners {
-				// var profiles []interface{}
-				profiles := map[string]interface{}{}
 				virtual := map[string]interface{}{}
 
 				lsname := gwListenerName(gw, &listener)
@@ -234,10 +232,9 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 					virtual["profileHTTP"] = "basic"
 					virtual["class"] = "Service_HTTP"
 				case gatewayv1beta1.HTTPSProtocolType:
-					// class = "Service_HTTPS"
 					virtual["class"] = "Service_HTTPS"
 					virtual["profileHTTP"] = "basic"
-					profiles["serverTLS"] = lsname
+					virtual["serverTLS"] = lsname
 				case gatewayv1beta1.TCPProtocolType:
 					return fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
 				case gatewayv1beta1.UDPProtocolType:
@@ -287,51 +284,51 @@ func parseMembersFrom(svcNamespace, svcName string) ([]interface{}, error) {
 	}
 }
 
-func parseArpsFrom(svcNamespace, svcName string, rlt map[string]interface{}) error {
-	svc := ActiveSIGs.GetService(utils.Keyname(svcNamespace, svcName))
-	eps := ActiveSIGs.GetEndpoints(utils.Keyname(svcNamespace, svcName))
-	if svc != nil && eps != nil {
-		if mbs, err := k8s.FormatMembersFromServiceEndpoints(svc, eps); err != nil {
-			return err
-		} else {
-			prefix := "k8s-"
-			for _, mb := range mbs {
-				if mb.MacAddr != "" {
-					rlt["net/arp/"+prefix+mb.IpAddr] = map[string]interface{}{
-						"name":       prefix + mb.IpAddr,
-						"ipAddress":  mb.IpAddr,
-						"macAddress": mb.MacAddr,
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
+// func parseArpsFrom(svcNamespace, svcName string, rlt map[string]interface{}) error {
+// 	svc := ActiveSIGs.GetService(utils.Keyname(svcNamespace, svcName))
+// 	eps := ActiveSIGs.GetEndpoints(utils.Keyname(svcNamespace, svcName))
+// 	if svc != nil && eps != nil {
+// 		if mbs, err := k8s.FormatMembersFromServiceEndpoints(svc, eps); err != nil {
+// 			return err
+// 		} else {
+// 			prefix := "k8s-"
+// 			for _, mb := range mbs {
+// 				if mb.MacAddr != "" {
+// 					rlt["net/arp/"+prefix+mb.IpAddr] = map[string]interface{}{
+// 						"name":       prefix + mb.IpAddr,
+// 						"ipAddress":  mb.IpAddr,
+// 						"macAddress": mb.MacAddr,
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// 	return nil
+// }
 
-func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) error {
-	svc := ActiveSIGs.GetService(utils.Keyname(svcNamespace, svcName))
-	eps := ActiveSIGs.GetEndpoints(utils.Keyname(svcNamespace, svcName))
-	if svc != nil && eps != nil {
-		if mbs, err := k8s.FormatMembersFromServiceEndpoints(svc, eps); err != nil {
-			return err
-		} else {
-			for _, mb := range mbs {
-				rlt["ltm/node/"+mb.IpAddr] = map[string]interface{}{
-					"name":    mb.IpAddr,
-					"address": mb.IpAddr,
-					"monitor": "default",
-					"session": "user-enabled",
-				}
-			}
-		}
-	}
-	return nil
-}
+// func parseNodesFrom(svcNamespace, svcName string, rlt map[string]interface{}) error {
+// 	svc := ActiveSIGs.GetService(utils.Keyname(svcNamespace, svcName))
+// 	eps := ActiveSIGs.GetEndpoints(utils.Keyname(svcNamespace, svcName))
+// 	if svc != nil && eps != nil {
+// 		if mbs, err := k8s.FormatMembersFromServiceEndpoints(svc, eps); err != nil {
+// 			return err
+// 		} else {
+// 			for _, mb := range mbs {
+// 				rlt["ltm/node/"+mb.IpAddr] = map[string]interface{}{
+// 					"name":    mb.IpAddr,
+// 					"address": mb.IpAddr,
+// 					"monitor": "default",
+// 					"session": "user-enabled",
+// 				}
+// 			}
+// 		}
+// 	}
+// 	return nil
+// }
 
 func parseSecrets(lsname string, scrts []*v1.Secret, rlt map[string]interface{}) {
 	certs := []interface{}{}
-	for i, scrt := range scrts {
+	for _, scrt := range scrts {
 		crtContent := string(scrt.Data[v1.TLSCertKey])
 		keyContent := string(scrt.Data[v1.TLSPrivateKeyKey])
 
@@ -344,7 +341,7 @@ func parseSecrets(lsname string, scrts []*v1.Secret, rlt map[string]interface{})
 		}
 		certs = append(certs, map[string]interface{}{
 			"certificate": name,
-			"sniDefault":  i == 0,
+			// "sniDefault":  i == 0,
 		})
 	}
 

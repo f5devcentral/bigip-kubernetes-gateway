@@ -196,8 +196,8 @@ func parsePoolweight(backends []gatewayv1beta1.HTTPBackendRef, hr *gatewayv1beta
 		if svc != nil && !ActiveSIGs.CanRefer(hr, svc) {
 			continue
 		}
-		pn := strings.Join([]string{ns, string(br.Name)}, ".")
-		pool := fmt.Sprintf("/%s/serviceMain/%s", "cis-c-tenant", pn)
+		// pn := strings.Join([]string{ns, string(br.Name)}, ".")
+		pool := fmt.Sprintf("/%s/serviceMain/%s", ns, string(br.Name))
 		weight := 1
 		if br.Weight != nil {
 			weight = int(*br.Weight)
