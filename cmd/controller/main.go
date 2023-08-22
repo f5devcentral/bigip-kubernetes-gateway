@@ -48,7 +48,6 @@ import (
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/webhooks"
 	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
-	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 
 	//+kubebuilder:scaffold:imports
@@ -123,7 +122,7 @@ func main() {
 		os.Exit(1)
 	}
 	pkg.LogLevel = cmdflags.LogLevel
-	pkg.PendingDeploys, pkg.DoneDeploys = deployer.Deployer(stopCh, pkg.BIGIPs)
+	pkg.PendingDeploys, pkg.DoneDeploys = pkg.AS3Deployer(stopCh, pkg.BIGIPs)
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -341,20 +340,21 @@ func dumpRuntimeHandler() http.HandlerFunc {
 				rlts := map[string]interface{}{}
 
 				queries := r.URL.Query()
-				for k, v := range queries {
+				for k := range queries {
+					// for k, v := range queries {
 					switch k {
-					case "gatewayclass":
-						for _, cls := range v {
-							gwc := pkg.ActiveSIGs.GetGatewayClass(cls)
-							gws := pkg.ActiveSIGs.AttachedGateways(gwc)
-							if rlt, err := pkg.ParseGatewayRelatedForClass(cls, gws); err != nil {
-								w.WriteHeader(500)
-								fmt.Fprintf(w, `{"error": "failed to parse gateway class: %s: %s"}`, cls, err.Error())
-								return
-							} else {
-								rlts[cls] = rlt
-							}
-						}
+					// case "gatewayclass":
+					// 	for _, cls := range v {
+					// 		gwc := pkg.ActiveSIGs.GetGatewayClass(cls)
+					// 		gws := pkg.ActiveSIGs.AttachedGateways(gwc)
+					// 		if rlt, err := pkg.ParseGatewayRelatedForClass(cls, gws); err != nil {
+					// 			w.WriteHeader(500)
+					// 			fmt.Fprintf(w, `{"error": "failed to parse gateway class: %s: %s"}`, cls, err.Error())
+					// 			return
+					// 		} else {
+					// 			rlts[cls] = rlt
+					// 		}
+					// 	}
 					default:
 						w.WriteHeader(400)
 						fmt.Fprintf(w, `{"error": "%s"}`, fmt.Sprintf("unsupported query type %s", k))

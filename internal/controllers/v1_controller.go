@@ -100,16 +100,17 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	var obj v1.Endpoints
 	// // too many logs.
 	// slog.Debugf("endpoint event: " + req.NamespacedName.String())
+	ns := req.Namespace
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			pkg.ActiveSIGs.UnsetEndpoints(req.NamespacedName.String())
-			return ctrl.Result{}, pkg.HandleBackends(lctx, req.Namespace)
+			return ctrl.Result{}, pkg.HandleBackends(lctx, ns)
 		} else {
 			return ctrl.Result{}, err
 		}
 	} else {
 		pkg.ActiveSIGs.SetEndpoints(obj.DeepCopy())
-		return ctrl.Result{}, pkg.HandleBackends(lctx, req.Namespace)
+		return ctrl.Result{}, pkg.HandleBackends(lctx, ns)
 	}
 }
 
