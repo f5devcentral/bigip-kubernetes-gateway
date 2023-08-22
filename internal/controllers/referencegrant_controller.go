@@ -23,7 +23,6 @@ import (
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
-	"github.com/google/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -32,7 +31,7 @@ import (
 type ReferenceGrantReconciler struct {
 	ObjectType client.Object
 	Client     client.Client
-	LogLevel   string
+	// LogLevel   string
 }
 
 func (r *ReferenceGrantReconciler) GetResObject() client.Object {
@@ -46,7 +45,7 @@ func (r *ReferenceGrantReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	keyname := req.NamespacedName.String()
-	lctx := context.WithValue(ctx, utils.CtxKey_Logger, utils.NewLog().WithRequestID(uuid.New().String()).WithLevel(r.LogLevel))
+	lctx := pkg.NewContext()
 	slog := utils.LogFromContext(lctx)
 
 	var obj gatewayv1beta1.ReferenceGrant

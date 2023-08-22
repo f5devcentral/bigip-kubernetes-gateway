@@ -2,18 +2,38 @@ package pkg
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
-	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
 	"github.com/f5devcentral/f5-bigip-rest-go/deployer"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
+	"github.com/google/uuid"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
+
+func init() {
+	ActiveSIGs = &SIGCache{
+		mutex:          sync.RWMutex{},
+		SyncedAtStart:  false,
+		ControllerName: "",
+		Gateway:        map[string]*gatewayv1beta1.Gateway{},
+		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
+		Endpoints:      map[string]*v1.Endpoints{},
+		Service:        map[string]*v1.Service{},
+		GatewayClass:   map[string]*gatewayv1beta1.GatewayClass{},
+		Namespace:      map[string]*v1.Namespace{},
+		ReferenceGrant: map[string]*gatewayv1beta1.ReferenceGrant{},
+		Secret:         map[string]*v1.Secret{},
+	}
+	refFromTo = &ReferenceGrantFromTo{}
+	LogLevel = utils.LogLevel_Type_INFO
+}
 
 func hrName(hr *gatewayv1beta1.HTTPRoute) string {
 	return strings.Join([]string{"hr", hr.Namespace, hr.Name}, ".")
@@ -158,86 +178,44 @@ func classNamesOfGateways(gws []*gatewayv1beta1.Gateway) []string {
 }
 
 func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() string) error {
+	slog := utils.LogFromContext(ctx)
+
+	meta := apply()
 	if len(impactedClasses) == 0 {
-		apply()
 		return nil
 	}
 
-	ocfgs := map[string]interface{}{}
 	ncfgs := map[string]interface{}{}
-	opcfgs := map[string]interface{}{}
-	npcfgs := map[string]interface{}{}
 	var err error
 
-	preParsinng := func() error {
-		for _, n := range impactedClasses {
-			if ocfgs[n], err = ParseAllForClass(n); err != nil {
-				return err
-			}
-		}
-		if opcfgs, err = ParseServicesRelatedForAll(); err != nil {
+	for _, n := range impactedClasses {
+		if ncfgs[n], err = ParseAllForClass(n); err != nil {
 			return err
 		}
-		return nil
 	}
 
-	postParsing := func() error {
-		for _, n := range impactedClasses {
-			if ncfgs[n], err = ParseAllForClass(n); err != nil {
-				return err
-			}
-		}
-		if npcfgs, err = ParseServicesRelatedForAll(); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	meta := ""
-	if err := preParsinng(); err != nil {
-		apply()
+	if scfgs, err := ParseClassRelatedServices(impactedClasses); err != nil {
 		return err
 	} else {
-		meta = apply()
-		if err := postParsing(); err != nil {
-			return err
+		for k, cfg := range scfgs {
+			ncfgs[k] = cfg
 		}
 	}
 
-	drs := map[string]*deployer.DeployRequest{}
-
-	for _, n := range impactedClasses {
-		ocfg := ocfgs[n].(map[string]interface{})
-		ncfg := ncfgs[n].(map[string]interface{})
-		drs[n] = &deployer.DeployRequest{
-			Meta:      fmt.Sprintf("Operating on %s for event %s", n, meta),
-			From:      &ocfg,
-			To:        &ncfg,
-			Partition: n,
-			Context:   ctx,
-		}
+	as3 := RestToAS3(ncfgs)
+	if bas3, err := json.Marshal(as3); err != nil {
+		return err
+	} else {
+		slog.Debugf("as3 body: %s", bas3)
 	}
 
-	// TODO: fix the issue:
-	//	2023/06/19 09:26:49.824036 [ERROR] [cd7c411d-e392-424f-8a76-be055f1286d2] \
-	//	failed to deploy partition cis-c-tenant: 400, {"code":400,"message":"0107082a:3: \
-	//	All objects must be removed from a partition (cis-c-tenant) before the partition may be removed, type ID (973)","errorStack":[],"apiError":3}
-
-	// TODO: fix the issue:
-	// 2023/06/19 09:17:39.572853 [ERROR] [a763bd16-498a-415a-89a3-f5fdf2aa5adf] \
-	//	failed to do deployment to https://10.250.15.109:443: 400, {"code":400,"message":"transaction failed:01070110:3: \
-	//	Node address '/cis-c-tenant/10.250.16.103' is referenced by a member of pool '/cis-c-tenant/default.dev-service'.","errorStack":[],"apiError":2}
-	drs["cis-c-tenant"] = &deployer.DeployRequest{
-		Meta:      fmt.Sprintf("Updating pools for event %s", meta),
-		From:      &opcfgs,
-		To:        &npcfgs,
-		Partition: "cis-c-tenant",
-		Context:   ctx,
-	}
-
-	for _, dr := range drs {
-		PendingDeploys.Add(*dr)
-	}
+	PendingDeploys.Add(deployer.DeployRequest{
+		Meta:    fmt.Sprintf("Operating on %s for event %s", impactedClasses, meta),
+		From:    nil,
+		To:      &as3,
+		AS3:     true,
+		Context: ctx,
+	})
 
 	return nil
 }
@@ -303,24 +281,24 @@ func validateSecretType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind) 
 }
 
 // purgeCommonNodes tries to remove  nodes from Common if no reference.
-func purgeCommonNodes(ctx context.Context, ombs []interface{}) {
-	for _, bp := range BIGIPs {
-		bc := f5_bigip.BIGIPContext{Context: ctx, BIGIP: *bp}
-		slog := utils.LogFromContext(ctx)
+// func purgeCommonNodes(ctx context.Context, ombs []interface{}) {
+// 	for _, bp := range BIGIPs {
+// 		bc := f5_bigip.BIGIPContext{Context: ctx, BIGIP: *bp}
+// 		slog := utils.LogFromContext(ctx)
 
-		for _, m := range ombs {
-			partition := m.(map[string]interface{})["partition"].(string)
-			if partition != "Common" {
-				continue
-			}
-			addr := m.(map[string]interface{})["address"].(string)
-			err := bc.Delete("ltm/node", addr, "Common", "")
-			if err != nil && !strings.Contains(err.Error(), "is referenced by a member of pool") {
-				slog.Warnf("cannot delete node %s: %s", addr, err.Error())
-			}
-		}
-	}
-}
+// 		for _, m := range ombs {
+// 			partition := m.(map[string]interface{})["partition"].(string)
+// 			if partition != "Common" {
+// 				continue
+// 			}
+// 			addr := m.(map[string]interface{})["address"].(string)
+// 			err := bc.Delete("ltm/node", addr, "Common", "")
+// 			if err != nil && !strings.Contains(err.Error(), "is referenced by a member of pool") {
+// 				slog.Warnf("cannot delete node %s: %s", addr, err.Error())
+// 			}
+// 		}
+// 	}
+// }
 
 // // splitByPartition split the cfgs into a map of which keys are partitions
 // func splitByPartition(ctx context.Context, cfgs map[string]interface{}) map[string]interface{} {
@@ -364,4 +342,92 @@ func filterCommonResources(cfgs map[string]interface{}) map[string]interface{} {
 		}
 	}
 	return rlt
+}
+
+func NewContext() context.Context {
+	reqid := uuid.New().String()
+	slog := utils.NewLog().WithLevel(LogLevel).WithRequestID(reqid)
+	ctxid := context.WithValue(context.TODO(), utils.CtxKey_RequestID, reqid)
+	ctx := context.WithValue(ctxid, utils.CtxKey_Logger, slog)
+	return ctx
+}
+
+func RestToAS3(cfgs map[string]interface{}) map[string]interface{} {
+
+	as3 := map[string]interface{}{
+		"class":   "AS3",
+		"action":  "deploy",
+		"persist": false,
+	}
+
+	declarations := map[string]interface{}{
+		"class":         "ADC",
+		"schemaVersion": "3.19.0",
+	}
+
+	for p, cfg := range cfgs {
+		tenant := map[string]interface{}{
+			"class": "Tenant",
+		}
+		for k, v := range cfg.(map[string]interface{}) {
+			application := map[string]interface{}{
+				"class": "Application",
+			}
+			for tn, resource := range v.(map[string]interface{}) {
+				t, n := typeAndName(tn)
+				switch t {
+				case "net/arp": // skip this resource in as3 mode
+				case "ltm/node":
+				default:
+					application[n] = resource
+				}
+			}
+			tenant[k] = application
+		}
+		declarations[p] = tenant
+	}
+
+	as3["declaration"] = declarations
+
+	b, _ := json.Marshal(as3)
+	fmt.Printf("In RestToAS3: %s\n", string(b))
+	return as3
+}
+
+func typeAndName(s string) (string, string) {
+	a := strings.Split(s, "/")
+	l := len(a)
+	t := strings.Join(a[0:l-1], "/")
+	n := a[l-1]
+	return t, n
+}
+
+func HandleBackends(ctx context.Context, namespace string) error {
+	svcs := ActiveSIGs.GetServicesWithNamespace(namespace)
+	kn := []string{}
+	for _, svc := range svcs {
+		for _, gw := range ActiveSIGs.GetRootGateways([]*v1.Service{svc}) {
+			if ActiveSIGs.GetGatewayClass(string(gw.Spec.GatewayClassName)) != nil {
+				kn = append(kn, utils.Keyname(svc.Namespace, svc.Name))
+			}
+		}
+	}
+
+	if len(kn) == 0 {
+		return nil
+	}
+
+	cfgs, err := ParseServices(kn)
+	if err != nil {
+		return err
+	} else {
+		as3 := RestToAS3(cfgs)
+		PendingDeploys.Add(deployer.DeployRequest{
+			Meta:    fmt.Sprintf("Deploying for '%s'", kn),
+			To:      &as3,
+			AS3:     true,
+			Context: ctx,
+		})
+	}
+	return nil
 }

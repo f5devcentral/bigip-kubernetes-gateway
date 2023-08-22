@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"sync"
 	"time"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/k8s"
@@ -19,23 +18,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func init() {
-	ActiveSIGs = &SIGCache{
-		mutex:          sync.RWMutex{},
-		SyncedAtStart:  false,
-		ControllerName: "",
-		Gateway:        map[string]*gatewayv1beta1.Gateway{},
-		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
-		Endpoints:      map[string]*v1.Endpoints{},
-		Service:        map[string]*v1.Service{},
-		GatewayClass:   map[string]*gatewayv1beta1.GatewayClass{},
-		Namespace:      map[string]*v1.Namespace{},
-		ReferenceGrant: map[string]*gatewayv1beta1.ReferenceGrant{},
-		Secret:         map[string]*v1.Secret{},
-	}
-	refFromTo = &ReferenceGrantFromTo{}
-}
 
 func (c *SIGCache) SetNamespace(obj *v1.Namespace) {
 	c.mutex.Lock()
@@ -134,6 +116,19 @@ func (c *SIGCache) GetService(keyname string) *v1.Service {
 	defer c.mutex.RUnlock()
 
 	return c.Service[keyname]
+}
+
+func (c *SIGCache) GetServicesWithNamespace(namespace string) []*v1.Service {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	rlt := []*v1.Service{}
+	for _, svc := range c.Service {
+		if svc.Namespace == namespace {
+			rlt = append(rlt, svc)
+		}
+	}
+	return rlt
 }
 
 func (c *SIGCache) GetEndpoints(keyname string) *v1.Endpoints {
@@ -463,26 +458,42 @@ func (c *SIGCache) _attachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service
 	return svcs
 }
 
-func (c *SIGCache) AllAttachedServiceKeys() []string {
+// func (c *SIGCache) AllAttachedServiceKeys() []string {
+// 	defer utils.TimeItToPrometheus()()
+
+// 	c.mutex.RLock()
+// 	defer c.mutex.RUnlock()
+
+// 	svcs := []*v1.Service{}
+// 	for _, gwc := range c.GatewayClass {
+// 		for _, gw := range c._attachedGateways(gwc) {
+// 			for _, hr := range c._attachedHTTPRoutes(gw) {
+// 				svcs = append(svcs, c._attachedServices(hr)...)
+// 			}
+// 		}
+// 	}
+
+// 	rlt := []string{}
+// 	for _, svc := range svcs {
+// 		rlt = append(rlt, utils.Keyname(svc.Namespace, svc.Name))
+// 	}
+// 	return rlt
+// }
+
+func (c *SIGCache) RelatedServices(gwc *gatewayv1beta1.GatewayClass) []*v1.Service {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	svcs := []*v1.Service{}
-	for _, gwc := range c.GatewayClass {
-		for _, gw := range c._attachedGateways(gwc) {
-			for _, hr := range c._attachedHTTPRoutes(gw) {
-				svcs = append(svcs, c._attachedServices(hr)...)
-			}
+	for _, gw := range c._attachedGateways(gwc) {
+		for _, hr := range c._attachedHTTPRoutes(gw) {
+			svcs = append(svcs, c._attachedServices(hr)...)
 		}
 	}
 
-	rlt := []string{}
-	for _, svc := range svcs {
-		rlt = append(rlt, utils.Keyname(svc.Namespace, svc.Name))
-	}
-	return rlt
+	return svcs
 }
 
 func (c *SIGCache) AllHTTPRoutes() []*gatewayv1beta1.HTTPRoute {

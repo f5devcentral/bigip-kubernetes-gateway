@@ -15,3 +15,8 @@ var (
 	refFromTo      *ReferenceGrantFromTo
 	LogLevel       string
 )
+
+// const (
+// 	DeployMethod_AS3  = "as3"
+// 	DeployMethod_REST = "rest"
+// )

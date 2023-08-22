@@ -56,11 +56,20 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
+type CmdFlags struct {
+	CredsDir     string
+	CertDir      string
+	ConfDir      string
+	Validates    string
+	DeployMethod string
+	LogLevel     string
+}
+
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
-	level    = utils.LogLevel_Type_INFO
-	stopCh   = make(chan struct{})
+	scheme            = runtime.NewScheme()
+	setupLog          = ctrl.Log.WithName("setup")
+	stopCh            = make(chan struct{})
+	cmdflags CmdFlags = CmdFlags{}
 )
 
 func init() {
@@ -76,11 +85,7 @@ func main() {
 		metricsAddr          string
 		enableLeaderElection bool
 		probeAddr            string
-		credsDir             string
-		certDir              string
-		confDir              string
 		controllerName       string
-		validates            string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -89,14 +94,15 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
-	flag.StringVar(&credsDir, "bigip-credential-directory", "/bigip-credential", "Directory that contains the BIG-IP "+
+	flag.StringVar(&cmdflags.CredsDir, "bigip-credential-directory", "/bigip-credential", "Directory that contains the BIG-IP "+
 		"password file. To be used instead of bigip-password arguments.")
-	flag.StringVar(&certDir, "certificate-directory", "/certificate-directory", "Directory that contains tls.crt and tls.key for webook https server.")
-	flag.StringVar(&confDir, "bigip-config-directory", "/bigip-config", "Directory of bigip-k8s-gw-conf.yaml file.")
+	flag.StringVar(&cmdflags.CertDir, "certificate-directory", "/certificate-directory", "Directory that contains tls.crt and tls.key for webook https server.")
+	flag.StringVar(&cmdflags.ConfDir, "bigip-config-directory", "/bigip-config", "Directory of bigip-k8s-gw-conf.yaml file.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
-	flag.StringVar(&level, "log-level", utils.LogLevel_Type_INFO, "The log level, valid values: trace, debug, info, warn, error")
-	flag.StringVar(&validates, "validates", "", fmt.Sprintf("The items to validate synchronizingly, on operations "+
+	flag.StringVar(&cmdflags.LogLevel, "log-level", utils.LogLevel_Type_INFO, "The log level, valid values: trace, debug, info, warn, error")
+	flag.StringVar(&cmdflags.Validates, "validates", "", fmt.Sprintf("The items to validate synchronizingly, on operations "+
 		"concating multiple values with ',', valid values: %s", strings.Join(webhooks.SupportedValidatingKeys(), ",")))
+	flag.StringVar(&cmdflags.DeployMethod, "deploy-method", "as3", "The deploy method to BIG-IP for the gateway resources, valid values: as3 rest")
 
 	opts := zap.Options{
 		Development: true,
@@ -104,26 +110,27 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	if err := webhooks.ValidateGivenKeys(strings.Split(validates, ",")); err != nil {
+	if err := webhooks.ValidateGivenKeys(strings.Split(cmdflags.Validates, ",")); err != nil {
 		setupLog.Error(err, "--validates fault")
 		os.Exit(1)
 	} else {
-		webhooks.TurnOnValidatingFor(strings.Split(validates, ","))
+		webhooks.TurnOnValidatingFor(strings.Split(cmdflags.Validates, ","))
 	}
 
 	pkg.ActiveSIGs.ControllerName = controllerName
-	if err := setupBIGIPs(credsDir, confDir); err != nil {
+	if err := setupBIGIPs(cmdflags.CredsDir, cmdflags.ConfDir); err != nil {
 		setupLog.Error(err, "failed to setup BIG-IPs")
 		os.Exit(1)
 	}
-	pkg.LogLevel = level
+	pkg.LogLevel = cmdflags.LogLevel
 	pkg.PendingDeploys, pkg.DoneDeploys = deployer.Deployer(stopCh, pkg.BIGIPs)
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
-		CertDir:                certDir,
+		CertDir:                cmdflags.CertDir,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "303cfed9.f5.com",
@@ -212,54 +219,54 @@ func setupReconcilers(mgr manager.Manager) {
 		&controllers.GatewayClassReconciler{
 			ObjectType: &gatewayv1beta1.GatewayClass{},
 			Client:     mgr.GetClient(),
-			LogLevel:   level,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.GatewayReconciler{
 			ObjectType: &gatewayv1beta1.Gateway{},
 			Client:     mgr.GetClient(),
-			LogLevel:   level,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.HttpRouteReconciler{
 			ObjectType: &gatewayv1beta1.HTTPRoute{},
 			Client:     mgr.GetClient(),
-			LogLevel:   level,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.ReferenceGrantReconciler{
 			ObjectType: &gatewayv1beta1.ReferenceGrant{},
 			Client:     mgr.GetClient(),
-			LogLevel:   level,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.SecretReconciler{
 			ObjectType: &v1.Secret{},
 			Client:     mgr.GetClient(),
-			LogLevel:   level,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.EndpointsReconciler{
 			ObjectType: &v1.Endpoints{},
 			Client:     mgr.GetClient(),
-			LogLevel:   level,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.ServiceReconciler{
 			ObjectType: &v1.Service{},
 			Client:     mgr.GetClient(),
-			LogLevel:   level,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.NodeReconciler{
 			ObjectType: &v1.Node{},
 			Client:     mgr.GetClient(),
-			LogLevel:   level,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.NamespaceReconciler{
 			ObjectType: &v1.Namespace{},
 			Client:     mgr.GetClient(),
-			LogLevel:   level,
+			// LogLevel:   cmdflags.LogLevel,
 		},
 	)
 	resources.StartReconcilers(mgr)
 }
 
 func setupWebhooks(mgr manager.Manager) {
-	slog := utils.NewLog().WithLevel(level).WithRequestID(uuid.NewString())
+	slog := utils.NewLog().WithLevel(cmdflags.LogLevel).WithRequestID(uuid.NewString())
 
 	if err := (&webhooks.GatewayClassWebhook{Logger: slog}).
 		SetupWebhookWithManager(mgr); err != nil {
@@ -315,7 +322,7 @@ func setupBIGIPs(credsDir, confDir string) error {
 
 func dumpRuntimeHandler() http.HandlerFunc {
 	slog := utils.LogFromContext(context.TODO())
-	if level != utils.LogLevel_Type_DEBUG {
+	if cmdflags.LogLevel != utils.LogLevel_Type_DEBUG {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Content-Type", "application/json")
 			w.WriteHeader(200)
