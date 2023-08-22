@@ -178,10 +178,9 @@ func classNamesOfGateways(gws []*gatewayv1beta1.Gateway) []string {
 	return utils.Unified(rlt)
 }
 
-func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() string) error {
-	slog := utils.LogFromContext(ctx)
+func DeployForEvent(ctx context.Context, impactedClasses []string) error {
+	// slog := utils.LogFromContext(ctx)
 
-	meta := apply()
 	if len(impactedClasses) == 0 {
 		return nil
 	}
@@ -204,14 +203,8 @@ func DeployForEvent(ctx context.Context, impactedClasses []string, apply func() 
 	}
 
 	as3 := RestToAS3(ncfgs)
-	if bas3, err := json.Marshal(as3); err != nil {
-		return err
-	} else {
-		slog.Debugf("as3 body: %s", bas3)
-	}
-
 	PendingDeploys.Add(deployer.DeployRequest{
-		Meta:    fmt.Sprintf("Operating on %s for event %s", impactedClasses, meta),
+		// Meta:    fmt.Sprintf("Operating on %s for event %s", impactedClasses, meta),
 		From:    nil,
 		To:      &as3,
 		AS3:     true,

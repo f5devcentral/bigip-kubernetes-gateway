@@ -77,10 +77,8 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		ns := pkg.ActiveSIGs.GetNamespace(req.Name)
 		if ns != nil && !utils.DeepEqual(ns.Labels, obj.Labels) {
 			cls := pkg.ActiveSIGs.NSImpactedGatewayClasses(&obj)
-			err := pkg.DeployForEvent(lctx, cls, func() string {
-				pkg.ActiveSIGs.SetNamespace(obj.DeepCopy())
-				return "updating namespace " + ns.Name
-			})
+			pkg.ActiveSIGs.SetNamespace(obj.DeepCopy())
+			err := pkg.DeployForEvent(lctx, cls)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
