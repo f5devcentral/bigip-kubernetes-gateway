@@ -3,7 +3,7 @@ module github.com/f5devcentral/bigip-kubernetes-gateway
 go 1.19
 
 require (
-	github.com/f5devcentral/f5-bigip-rest-go v1.2.0
+	github.com/f5devcentral/f5-bigip-rest-go v1.2.8
 	github.com/google/uuid v1.3.0
 	github.com/onsi/ginkgo/v2 v2.9.1
 	github.com/onsi/gomega v1.27.3

@@ -68,8 +68,8 @@ github.com/evanphx/json-patch v0.5.2/go.mod h1:ZWS5hhDbVDyob71nXKNL0+PWn6ToqBHMi
 github.com/evanphx/json-patch v4.12.0+incompatible h1:4onqiflcdA9EOZ4RxV643DvftH5pOlLGNtQ5lPWQu84=
 github.com/evanphx/json-patch/v5 v5.6.0 h1:b91NhWfaz02IuVxO9faSllyAtNXHMPkC5J8sJCLunww=
 github.com/evanphx/json-patch/v5 v5.6.0/go.mod h1:G79N1coSVB93tBe7j6PhzjmR3/2VvlbKOFpnXhI9Bw4=
-github.com/f5devcentral/f5-bigip-rest-go v1.2.0 h1:foblWPk0DeLnJdXft81zvb2AUVPgOFiNOCpt1BOXIYc=
-github.com/f5devcentral/f5-bigip-rest-go v1.2.0/go.mod h1:gFO+eU59RmrjgZgyxJMPghtiP4+H0WVp5g5ChHKHDjA=
+github.com/f5devcentral/f5-bigip-rest-go v1.2.8 h1:L1tDsGc8mTW3h297nEUm5yyyGrGmQEXxAa99bwJ/3hg=
+github.com/f5devcentral/f5-bigip-rest-go v1.2.8/go.mod h1:gFO+eU59RmrjgZgyxJMPghtiP4+H0WVp5g5ChHKHDjA=
 github.com/fsnotify/fsnotify v1.6.0 h1:n+5WquG0fcWoWp6xPWfHdbskMCQaFnG6PfBrh1Ky4HY=
 github.com/fsnotify/fsnotify v1.6.0/go.mod h1:sl3t1tCWJFWoRz9R8WJCbQihKKwmorjAbSClcnxKAGw=
 github.com/go-gl/glfw v0.0.0-20190409004039-e6da0acd62b1/go.mod h1:vR7hzQXu2zJy9AVAgeJqvqgH9Q5CA+iKCZ2gyEVpxRU=
