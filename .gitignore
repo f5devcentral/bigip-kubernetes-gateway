@@ -27,4 +27,5 @@ Dockerfile.cross
 vendor
 __debug_bin
 bigip-kubernetes-gateway-controller-*
+bigip-kubernetes-gateway-webhook-*
 .vscode

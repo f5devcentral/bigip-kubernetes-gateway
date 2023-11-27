@@ -1,98 +1,4 @@
 
----
-
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
-metadata:
-  creationTimestamp: null
-  name: validating-webhook-configuration
-  annotations:
-    cert-manager.io/inject-ca-from: kube-system/my-selfsigned-ca
-webhooks:
-  - admissionReviewVersions:
-      - v1beta1
-      - v1
-    clientConfig:
-      service:
-        name: bigip-kubernetes-gateway
-        namespace: kube-system
-        path: /validate-gateway-networking-k8s-io-v1beta1-gatewayclass
-        port: 9443
-      # url: "https://10.250.64.101:9443/validate-gateway-networking-k8s-io-v1beta1-gatewayclass"
-    failurePolicy: Fail
-    name: vgwc.kb.io
-    rules:
-      - apiGroups:
-          - gateway.networking.k8s.io
-        apiVersions:
-        - v1beta1
-        operations: ["*"]
-        resources:
-          - gatewayclasses
-    sideEffects: None
-  - admissionReviewVersions:
-      - v1beta1
-      - v1
-    clientConfig:
-      service:
-        name: bigip-kubernetes-gateway
-        namespace: kube-system
-        path: /validate-gateway-networking-k8s-io-v1beta1-gateway
-        port: 9443
-      # url: "https://10.250.64.101:9443/validate-gateway-networking-k8s-io-v1beta1-gateway"
-    failurePolicy: Fail
-    name: vgw.kb.io
-    rules:
-      - apiGroups:
-          - gateway.networking.k8s.io
-        apiVersions:
-        - v1beta1
-        operations: ["*"]
-        resources:
-          - gateways
-    sideEffects: None
-  - admissionReviewVersions:
-      - v1beta1
-      - v1
-    clientConfig:
-      service:
-        name: bigip-kubernetes-gateway
-        namespace: kube-system
-        path: /validate-gateway-networking-k8s-io-v1beta1-httproute
-        port: 9443
-      # url: "https://10.250.64.101:9443/validate-gateway-networking-k8s-io-v1beta1-httproute"
-    failurePolicy: Fail
-    name: vhr.kb.io
-    rules:
-      - apiGroups:
-          - gateway.networking.k8s.io
-        apiVersions:
-        - v1beta1
-        operations: ["*"]
-        resources:
-          - httproutes
-    sideEffects: None
-  - admissionReviewVersions:
-      - v1beta1
-      - v1
-    clientConfig:
-      service:
-        name: bigip-kubernetes-gateway
-        namespace: kube-system
-        path: /validate-gateway-networking-k8s-io-v1beta1-referencegrant
-        port: 9443
-      # url: "https://10.250.64.101:9443/validate-gateway-networking-k8s-io-v1beta1-referencegrant"
-    failurePolicy: Fail
-    name: vrg.kb.io
-    rules:
-      - apiGroups:
-          - gateway.networking.k8s.io
-        apiVersions:
-        - v1beta1
-        operations: ["*"]
-        resources:
-          - referencegrants
-    sideEffects: None
 
 ---
 
@@ -101,8 +7,8 @@ kind: Secret
 metadata:
   name: bigip-login
   namespace: kube-system
-data:
-  password: UEBzc3cwcmQxMjM=   # base64 encoded
+stringData:
+  password: P@ssw0rd123
 type: Opaque
 
 ---
@@ -110,13 +16,13 @@ type: Opaque
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: bigip-kubernetes-gateway-configmap
+  name: bigip-kubernetes-gateway-controller-configmap
   namespace: kube-system
 data:
   bigip-kubernetes-gateway-config: |
     - management:
         username: admin
-        ipAddress: 10.250.2.219
+        ipAddress: 10.250.11.186
         port: 443
 
 ---
@@ -124,45 +30,42 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: bigip-kubernetes-gateway
+  name: bigip-kubernetes-gateway-controller
   namespace: kube-system
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: bigip-kubernetes-gateway-pod
+      app: bigip-kubernetes-gateway-controller-pod
   template:
     metadata:
-      name: bigip-kubernetes-gateway-pod
+      name: bigip-kubernetes-gateway-controller-pod
       labels:
-        app: bigip-kubernetes-gateway-pod
+        app: bigip-kubernetes-gateway-controller-pod
     spec:
       serviceAccountName: k8s-bigip-ctlr
       nodeSelector:
         # node-role.kubernetes.io/control-plane: "true"
         # node-role.kubernetes.io/master: "true"
       containers:
-        # kubectl logs -f deployment/bigip-kubernetes-gateway -c bigip-kubernetes-gateway-pod -n kube-system
-        - name: bigip-kubernetes-gateway-pod
-          image: f5devcentral/bigip-kubernetes-gateway:v0.2.1-20230411
+        # kubectl logs -f deployment/bigip-kubernetes-gateway-controller -n kube-system
+        - name: bigip-kubernetes-gateway-controller-pod
+          # image: f5devcentral/bigip-kubernetes-gateway:v0.2.1-20230411
           # image: zongzw/bigip-kubernetes-gateway:latest-20230317-150818
+          image: zongzw/bigip-kubernetes-gateway-controller:latest-20231127-213249
           imagePullPolicy: IfNotPresent
           command: ["/bigip-kubernetes-gateway-controller-linux"]
           args: [
             "--controller-name=f5.io/gateway-controller-name",
             "--bigip-config-directory=/bigip-config",
-            "--bigip-credential-directory=/bigip-credential",
-            "--certificate-directory=/tmp/k8s-webhook-server/serving-certs"
+            "--bigip-credential-directory=/bigip-credential"
           ]
           volumeMounts:
             - name: bigip-credential
-              mountPath: "/bigip-credential"
+              mountPath: /bigip-credential
               readOnly: true
             - name: bigip-config
               mountPath: /bigip-config
-              readOnly: true
-            - mountPath: /tmp/k8s-webhook-server/serving-certs
-              name: cert
               readOnly: true
       volumes:
         - name: bigip-credential
@@ -170,36 +73,27 @@ spec:
             secretName: bigip-login
         - name: bigip-config
           configMap:
-            name: bigip-kubernetes-gateway-configmap
-        - name: cert
-          secret:
-            defaultMode: 420
-            secretName: webhook-server-cert
+            name: bigip-kubernetes-gateway-controller-configmap
 ---
 
 # expose the Prometheus port with NodePort
 apiVersion: v1
 kind: Service
 metadata:
-  name: bigip-kubernetes-gateway
+  name: bigip-kubernetes-gateway-controller
   namespace: kube-system
 spec:
   selector:
-    app: bigip-kubernetes-gateway-pod
+    app: bigip-kubernetes-gateway-controller-pod
   ports:
-    - name: bigip-kubernetes-gateway-metrics
+    - name: bigip-kubernetes-gateway-controller-metrics
       protocol: TCP
       port: 8080
       targetPort: 8080
       nodePort: 30080
-    - name: bigip-kubernetes-gateway-health
+    - name: bigip-kubernetes-gateway-controller-health
       protocol: TCP
       port: 8081
       targetPort: 8081
       nodePort: 30081
-    - name: bigip-kubernetes-gateway-webhook
-      protocol: TCP
-      port: 9443
-      targetPort: 9443
-      nodePort: 30443
   type: NodePort

@@ -29,7 +29,6 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
-	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v3"
@@ -57,7 +56,6 @@ import (
 
 type CmdFlags struct {
 	CredsDir     string
-	CertDir      string
 	ConfDir      string
 	Validates    string
 	DeployMethod string
@@ -95,7 +93,6 @@ func main() {
 
 	flag.StringVar(&cmdflags.CredsDir, "bigip-credential-directory", "/bigip-credential", "Directory that contains the BIG-IP "+
 		"password file. To be used instead of bigip-password arguments.")
-	flag.StringVar(&cmdflags.CertDir, "certificate-directory", "/certificate-directory", "Directory that contains tls.crt and tls.key for webook https server.")
 	flag.StringVar(&cmdflags.ConfDir, "bigip-config-directory", "/bigip-config", "Directory of bigip-k8s-gw-conf.yaml file.")
 	flag.StringVar(&controllerName, "controller-name", "f5.io/gateway-controller-name", "This controller name.")
 	flag.StringVar(&cmdflags.LogLevel, "log-level", utils.LogLevel_Type_INFO, "The log level, valid values: trace, debug, info, warn, error")
@@ -130,8 +127,6 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
-		CertDir:                cmdflags.CertDir,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "303cfed9.f5.com",
@@ -160,7 +155,6 @@ func main() {
 	mgr.AddMetricsExtraHandler("/runtime/", dumpRuntimeHandler())
 
 	setupReconcilers(mgr)
-	setupWebhooks(mgr)
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
@@ -264,35 +258,6 @@ func setupReconcilers(mgr manager.Manager) {
 		},
 	)
 	resources.StartReconcilers(mgr)
-}
-
-func setupWebhooks(mgr manager.Manager) {
-	slog := utils.NewLog().WithLevel(cmdflags.LogLevel).WithRequestID(uuid.NewString())
-
-	if err := (&webhooks.GatewayClassWebhook{Logger: slog}).
-		SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "gatewayclass")
-		os.Exit(1)
-	}
-
-	if err := (&webhooks.GatewayWebhook{
-		Logger: slog,
-	}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "gateway")
-		os.Exit(1)
-	}
-
-	if err := (&webhooks.HTTPRouteWebhook{Logger: slog}).
-		SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "httproute")
-		os.Exit(1)
-	}
-
-	if err := (&webhooks.ReferenceGrantWebhook{Logger: slog}).
-		SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "referencegrant")
-		os.Exit(1)
-	}
 }
 
 func setupBIGIPs(credsDir, confDir string) error {
