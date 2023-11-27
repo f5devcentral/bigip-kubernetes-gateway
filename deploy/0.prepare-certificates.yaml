@@ -47,8 +47,8 @@ metadata:
   namespace: kube-system
 spec:
   dnsNames:
-  - bigip-kubernetes-gateway.kube-system.svc
-  - bigip-kubernetes-gateway.kube-system.svc.cluster.local
+  - bigip-kubernetes-gateway-webhook.kube-system.svc
+  - bigip-kubernetes-gateway-webhook.kube-system.svc.cluster.local
   ipAddresses:
     - 127.0.0.1
     - 0.0.0.0
