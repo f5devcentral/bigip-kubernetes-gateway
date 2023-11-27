@@ -1,21 +1,23 @@
-all: image_upload
+all: upload
 
 timestamp ?= $(shell date +%Y%m%d-%H%M%S)
 version ?= latest
-docker_repo ?= zongzw/bigip-kubernetes-gateway
+controller_docker_repo ?= zongzw/bigip-kubernetes-gateway-controller
 
-image_name := ${docker_repo}:${version}-${timestamp}
+controller_image_name := ${controller_docker_repo}:${version}-${timestamp}
 
-image_upload: image_build
-	docker push ${image_name}
+upload: images
+	docker push ${controller_image_name}
 
-image_build: binary_build
+images: binaries
 	cd .. && docker build \
 		--no-cache \
-		-t ${image_name} \
+		-t ${controller_image_name} \
 		-f build/Dockerfile .
 
-binary_build:
+binaries: controller
+
+controller:
 	cd ../cmd/controller; \
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 	go build -ldflags '-s -w --extldflags "-static -fpic"' -o bigip-kubernetes-gateway-controller-linux; \
