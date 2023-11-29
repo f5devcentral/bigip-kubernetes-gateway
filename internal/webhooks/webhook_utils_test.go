@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
+	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -594,3 +595,131 @@ var _ = Describe("validate*Types", func() {
 		Expect(validateGatewayType(g, k)).ToNot(Succeed())
 	})
 })
+
+func Test_rgExists(t *testing.T) {
+	rgObj := gatewayv1beta1.ReferenceGrant{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       string(rgKind),
+			APIVersion: group + "/" + version,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: nsDefault,
+			Name:      "myreferencegrant",
+		},
+		Spec: gatewayv1beta1.ReferenceGrantSpec{
+			From: []gatewayv1beta1.ReferenceGrantFrom{
+				{
+					Group:     gatewayv1beta1.Group(group),
+					Kind:      gatewayv1beta1.Kind(gwKind),
+					Namespace: gatewayv1beta1.Namespace(nsDefault),
+				},
+			},
+			To: []gatewayv1beta1.ReferenceGrantTo{
+				{
+					Group: v1.GroupName,
+					Kind:  gatewayv1beta1.Kind(scrtKind),
+				},
+			},
+		},
+	}
+	rgList := gatewayv1beta1.ReferenceGrantList{Items: []gatewayv1beta1.ReferenceGrant{rgObj}}
+
+	type args struct {
+		rgs *gatewayv1beta1.ReferenceGrantList
+		rgf *gatewayv1beta1.ReferenceGrantFrom
+		rgt *gatewayv1beta1.ReferenceGrantTo
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		// TODO: Add test cases.
+		{
+			name: "normal",
+			args: args{
+				rgs: &rgList,
+				rgf: &rgObj.Spec.From[0],
+				rgt: &rgObj.Spec.To[0],
+			},
+			want: true,
+		},
+		{
+			name: "normal all",
+			args: args{
+				rgs: &rgList,
+				rgf: &rgObj.Spec.From[0],
+				rgt: &gatewayv1beta1.ReferenceGrantTo{
+					Group: "abc",
+					Kind:  gatewayv1beta1.Kind(scrtKind),
+				},
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rgExists(tt.args.rgs, tt.args.rgf, tt.args.rgt); got != tt.want {
+				t.Errorf("rgExists() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_canRefer(t *testing.T) {
+	rgObj := gatewayv1beta1.ReferenceGrant{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       string(rgKind),
+			APIVersion: group + "/" + version,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: nsDefault,
+			Name:      "myreferencegrant",
+		},
+		Spec: gatewayv1beta1.ReferenceGrantSpec{
+			From: []gatewayv1beta1.ReferenceGrantFrom{
+				{
+					Group:     gatewayv1beta1.Group(group),
+					Kind:      gatewayv1beta1.Kind(gwKind),
+					Namespace: gatewayv1beta1.Namespace(nsDefault),
+				},
+			},
+			To: []gatewayv1beta1.ReferenceGrantTo{
+				{
+					Group: v1.GroupName,
+					Kind:  gatewayv1beta1.Kind(scrtKind),
+				},
+			},
+		},
+	}
+	rgList := gatewayv1beta1.ReferenceGrantList{Items: []gatewayv1beta1.ReferenceGrant{rgObj}}
+
+	type args struct {
+		rgs  *gatewayv1beta1.ReferenceGrantList
+		from client.Object
+		to   client.Object
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		// TODO: Add test cases.
+		{
+			name: "normal",
+			args: args{
+				rgs:  &rgList,
+				from: gwObj,
+				to:   scrtObj,
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := canRefer(tt.args.rgs, tt.args.from, tt.args.to); got != tt.want {
+				t.Errorf("canRefer() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
