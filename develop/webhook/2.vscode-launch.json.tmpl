@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "GO: Launch webhook program",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "\${workspaceFolder}/cmd/webhook",
+            "args": [
+                "--controller-name",            "f5.io/gateway-controller-name",
+                "--log-level",                  "trace",
+                "--certificate-directory",      "\${workspaceFolder}/develop/webhook/certificates",
+                "--kubeconfig",                 "${kube_config}",
+                "--validates",                  "gateway.gatewayClassName,gateway.listeners.tls.certificateRefs,httproute.parentRefs,httproute.rules.backendRefs"
+            ]
+        }
+    ]
+}

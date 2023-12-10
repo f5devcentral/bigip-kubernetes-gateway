@@ -1,0 +1,91 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: kube-system/my-selfsigned-ca
+webhooks:
+  - admissionReviewVersions:
+      - v1beta1
+      - v1
+    clientConfig:
+      # service:
+        # name: webhook-service
+        # namespace: system
+      url: "https://${local_host_ipaddr}:9443/validate-gateway-networking-k8s-io-v1beta1-gatewayclass"
+    failurePolicy: Fail
+    name: vgwc.kb.io
+    rules:
+      - apiGroups:
+          - gateway.networking.k8s.io
+        apiVersions:
+        - v1beta1
+        operations: ["*"]
+        resources:
+          - gatewayclasses
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1beta1
+      - v1
+    clientConfig:
+      service:
+        # name: bigip-kubernetes-gateway
+        # namespace: kube-system
+        # path: /validate-gateway-networking-k8s-io-v1beta1-gateway
+        # port: 9443
+      url: "https://${local_host_ipaddr}:9443/validate-gateway-networking-k8s-io-v1beta1-gateway"
+    failurePolicy: Fail
+    name: vgw.kb.io
+    rules:
+      - apiGroups:
+          - gateway.networking.k8s.io
+        apiVersions:
+        - v1beta1
+        operations: ["*"]
+        resources:
+          - gateways
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1beta1
+      - v1
+    clientConfig:
+      # service:
+      #   name: bigip-kubernetes-gateway
+      #   namespace: kube-system
+      #   path: /validate-gateway-networking-k8s-io-v1beta1-httproute
+      #   port: 9443
+      url: "https://${local_host_ipaddr}:9443/validate-gateway-networking-k8s-io-v1beta1-httproute"
+    failurePolicy: Fail
+    name: vhr.kb.io
+    rules:
+      - apiGroups:
+          - gateway.networking.k8s.io
+        apiVersions:
+        - v1beta1
+        operations: ["*"]
+        resources:
+          - httproutes
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1beta1
+      - v1
+    clientConfig:
+      # service:
+      #   name: bigip-kubernetes-gateway
+      #   namespace: kube-system
+      #   path: /validate-gateway-networking-k8s-io-v1beta1-referencegrant
+      #   port: 9443
+      url: "https://${local_host_ipaddr}:9443/validate-gateway-networking-k8s-io-v1beta1-referencegrant"
+    failurePolicy: Fail
+    name: vrg.kb.io
+    rules:
+      - apiGroups:
+          - gateway.networking.k8s.io
+        apiVersions:
+        - v1beta1
+        operations: ["*"]
+        resources:
+          - referencegrants
+    sideEffects: None
