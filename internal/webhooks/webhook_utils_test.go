@@ -11,6 +11,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -20,22 +21,22 @@ func TestWebhooks(t *testing.T) {
 }
 
 var (
-	tlsmod    gatewayv1beta1.TLSModeType = gatewayv1beta1.TLSModeTerminate
-	group     string                     = gatewayv1beta1.GroupName
-	groupv1   string                     = v1.SchemeGroupVersion.Group
-	version   string                     = gatewayv1beta1.GroupVersion.Version
-	versionv1 string                     = v1.SchemeGroupVersion.Version
-	gwcKind   gatewayv1beta1.Kind        = gatewayv1beta1.Kind(reflect.TypeOf(gatewayv1beta1.GatewayClass{}).Name())
-	gwKind    gatewayv1beta1.Kind        = gatewayv1beta1.Kind(reflect.TypeOf(gatewayv1beta1.Gateway{}).Name())
-	hrKind    gatewayv1beta1.Kind        = gatewayv1beta1.Kind(reflect.TypeOf(gatewayv1beta1.HTTPRoute{}).Name())
-	rgKind    gatewayv1beta1.Kind        = gatewayv1beta1.Kind(reflect.TypeOf(gatewayv1beta1.ReferenceGrant{}).Name())
-	scrtKind  string                     = reflect.TypeOf(v1.Secret{}).Name()
-	svcKind   string                     = reflect.TypeOf(v1.Service{}).Name()
+	tlsmod    gatewayapi.TLSModeType = gatewayapi.TLSModeTerminate
+	group     string                 = gatewayapi.GroupName
+	groupv1   string                 = v1.SchemeGroupVersion.Group
+	version   string                 = gatewayapi.GroupVersion.Version
+	versionv1 string                 = v1.SchemeGroupVersion.Version
+	gwcKind   gatewayapi.Kind        = gatewayapi.Kind(reflect.TypeOf(gatewayapi.GatewayClass{}).Name())
+	gwKind    gatewayapi.Kind        = gatewayapi.Kind(reflect.TypeOf(gatewayapi.Gateway{}).Name())
+	hrKind    gatewayapi.Kind        = gatewayapi.Kind(reflect.TypeOf(gatewayapi.HTTPRoute{}).Name())
+	rgKind    gatewayapi.Kind        = gatewayapi.Kind(reflect.TypeOf(gatewayv1beta1.ReferenceGrant{}).Name())
+	scrtKind  string                 = reflect.TypeOf(v1.Secret{}).Name()
+	svcKind   string                 = reflect.TypeOf(v1.Service{}).Name()
 )
 var (
 	ctrname           string = "test-controller.f5.io"
 	nsDefault, nsABCD string = "default", "abcd"
-	allowRoutesSame   string = string(gatewayv1beta1.NamespacesFromSame)
+	allowRoutesSame   string = string(gatewayapi.NamespacesFromSame)
 
 	nsObj *v1.Namespace = &v1.Namespace{
 		TypeMeta: metav1.TypeMeta{
@@ -47,7 +48,7 @@ var (
 		},
 	}
 
-	gwcObj *gatewayv1beta1.GatewayClass = &gatewayv1beta1.GatewayClass{
+	gwcObj *gatewayapi.GatewayClass = &gatewayapi.GatewayClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       string(gwcKind),
 			APIVersion: group + "/" + version,
@@ -55,12 +56,12 @@ var (
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "bigip",
 		},
-		Spec: gatewayv1beta1.GatewayClassSpec{
-			ControllerName: gatewayv1beta1.GatewayController(ctrname),
+		Spec: gatewayapi.GatewayClassSpec{
+			ControllerName: gatewayapi.GatewayController(ctrname),
 		},
 	}
 
-	gwObj *gatewayv1beta1.Gateway = &gatewayv1beta1.Gateway{
+	gwObj *gatewayapi.Gateway = &gatewayapi.Gateway{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       string(gwKind),
 			APIVersion: group + "/" + version,
@@ -69,23 +70,23 @@ var (
 			Namespace: nsDefault,
 			Name:      "mygateway",
 		},
-		Spec: gatewayv1beta1.GatewaySpec{
+		Spec: gatewayapi.GatewaySpec{
 			GatewayClassName: "bigip",
-			Listeners: []gatewayv1beta1.Listener{
+			Listeners: []gatewayapi.Listener{
 				{
 					Name:     "mylistener",
-					Protocol: gatewayv1beta1.HTTPSProtocolType,
-					TLS: &gatewayv1beta1.GatewayTLSConfig{
+					Protocol: gatewayapi.HTTPSProtocolType,
+					TLS: &gatewayapi.GatewayTLSConfig{
 						Mode: &tlsmod,
-						CertificateRefs: []gatewayv1beta1.SecretObjectReference{
+						CertificateRefs: []gatewayapi.SecretObjectReference{
 							{
 								Name: "mysecret",
 							},
 						},
 					},
-					AllowedRoutes: &gatewayv1beta1.AllowedRoutes{
-						Namespaces: &gatewayv1beta1.RouteNamespaces{
-							From: (*gatewayv1beta1.FromNamespaces)(&allowRoutesSame),
+					AllowedRoutes: &gatewayapi.AllowedRoutes{
+						Namespaces: &gatewayapi.RouteNamespaces{
+							From: (*gatewayapi.FromNamespaces)(&allowRoutesSame),
 						},
 					},
 				},
@@ -93,7 +94,7 @@ var (
 		},
 	}
 
-	hrObj *gatewayv1beta1.HTTPRoute = &gatewayv1beta1.HTTPRoute{
+	hrObj *gatewayapi.HTTPRoute = &gatewayapi.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       string(hrKind),
 			APIVersion: group + "/" + version,
@@ -102,39 +103,39 @@ var (
 			Namespace: nsDefault,
 			Name:      "myhttproute",
 		},
-		Spec: gatewayv1beta1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayv1beta1.CommonRouteSpec{
-				ParentRefs: []gatewayv1beta1.ParentReference{
+		Spec: gatewayapi.HTTPRouteSpec{
+			CommonRouteSpec: gatewayapi.CommonRouteSpec{
+				ParentRefs: []gatewayapi.ParentReference{
 					{
-						Group:       (*gatewayv1beta1.Group)(&group),
+						Group:       (*gatewayapi.Group)(&group),
 						Kind:        &gwKind,
-						Name:        gatewayv1beta1.ObjectName(gwObj.GetObjectMeta().GetName()),
-						Namespace:   (*gatewayv1beta1.Namespace)(&nsDefault),
+						Name:        gatewayapi.ObjectName(gwObj.GetObjectMeta().GetName()),
+						Namespace:   (*gatewayapi.Namespace)(&nsDefault),
 						SectionName: &gwObj.Spec.Listeners[0].Name,
 					},
 				},
 			},
-			Rules: []gatewayv1beta1.HTTPRouteRule{
+			Rules: []gatewayapi.HTTPRouteRule{
 				{
-					BackendRefs: []gatewayv1beta1.HTTPBackendRef{
+					BackendRefs: []gatewayapi.HTTPBackendRef{
 						{
-							BackendRef: gatewayv1beta1.BackendRef{
-								BackendObjectReference: gatewayv1beta1.BackendObjectReference{
-									Group:     (*gatewayv1beta1.Group)(&groupv1),
-									Kind:      (*gatewayv1beta1.Kind)(&svcKind),
-									Name:      gatewayv1beta1.ObjectName(svcObj.Name),
-									Namespace: (*gatewayv1beta1.Namespace)(&nsDefault),
+							BackendRef: gatewayapi.BackendRef{
+								BackendObjectReference: gatewayapi.BackendObjectReference{
+									Group:     (*gatewayapi.Group)(&groupv1),
+									Kind:      (*gatewayapi.Kind)(&svcKind),
+									Name:      gatewayapi.ObjectName(svcObj.Name),
+									Namespace: (*gatewayapi.Namespace)(&nsDefault),
 								},
 							},
 						},
 					},
-					Filters: []gatewayv1beta1.HTTPRouteFilter{
+					Filters: []gatewayapi.HTTPRouteFilter{
 						{
-							Type: gatewayv1beta1.HTTPRouteFilterExtensionRef,
-							ExtensionRef: &gatewayv1beta1.LocalObjectReference{
-								Group: gatewayv1beta1.Group(groupv1),
-								Kind:  gatewayv1beta1.Kind(svcKind),
-								Name:  gatewayv1beta1.ObjectName(svcObj.Name),
+							Type: gatewayapi.HTTPRouteFilterExtensionRef,
+							ExtensionRef: &gatewayapi.LocalObjectReference{
+								Group: gatewayapi.Group(groupv1),
+								Kind:  gatewayapi.Kind(svcKind),
+								Name:  gatewayapi.ObjectName(svcObj.Name),
 							},
 						},
 					},
@@ -167,15 +168,15 @@ var (
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{
 				{
-					Group:     gatewayv1beta1.Group(group),
-					Kind:      gatewayv1beta1.Kind(gwKind),
-					Namespace: gatewayv1beta1.Namespace(nsDefault),
+					Group:     gatewayapi.Group(group),
+					Kind:      gatewayapi.Kind(gwKind),
+					Namespace: gatewayapi.Namespace(nsDefault),
 				},
 			},
 			To: []gatewayv1beta1.ReferenceGrantTo{
 				{
 					Group: v1.GroupName,
-					Kind:  gatewayv1beta1.Kind(scrtKind),
+					Kind:  gatewayapi.Kind(scrtKind),
 				},
 			},
 		},
@@ -270,7 +271,7 @@ var _ = Describe("GatewayWebhooks", func() {
 	Context("gateway has no listeners,", func() {
 		g := gwObj.DeepCopy()
 		s := scrtObj.DeepCopy()
-		g.Spec.Listeners = []gatewayv1beta1.Listener{}
+		g.Spec.Listeners = []gatewayapi.Listener{}
 		BeforeEach(func() {
 			pkg.ActiveSIGs.SetSecret(s)
 			pkg.ActiveSIGs.SetGateway(g)
@@ -286,7 +287,7 @@ var _ = Describe("GatewayWebhooks", func() {
 	Context("listener is not HTTPS protocol,", func() {
 		g := gwObj.DeepCopy()
 		s := scrtObj.DeepCopy()
-		g.Spec.Listeners[0].Protocol = gatewayv1beta1.HTTPProtocolType
+		g.Spec.Listeners[0].Protocol = gatewayapi.HTTPProtocolType
 		BeforeEach(func() {
 			pkg.ActiveSIGs.SetSecret(s)
 			pkg.ActiveSIGs.SetGateway(g)
@@ -302,7 +303,7 @@ var _ = Describe("GatewayWebhooks", func() {
 	Context("tls mod is not terminated", func() {
 		g := gwObj.DeepCopy()
 		s := scrtObj.DeepCopy()
-		*g.Spec.Listeners[0].TLS.Mode = gatewayv1beta1.TLSModePassthrough
+		*g.Spec.Listeners[0].TLS.Mode = gatewayapi.TLSModePassthrough
 		BeforeEach(func() {
 			pkg.ActiveSIGs.SetSecret(s)
 			pkg.ActiveSIGs.SetGateway(g)
@@ -375,7 +376,7 @@ var _ = Describe("GatewayWebhooks", func() {
 		r := rgObj.DeepCopy()
 		r.ObjectMeta.Namespace = nsABCD
 		g := gwObj.DeepCopy()
-		g.Spec.Listeners[0].TLS.CertificateRefs[0].Namespace = (*gatewayv1beta1.Namespace)(&nsABCD)
+		g.Spec.Listeners[0].TLS.CertificateRefs[0].Namespace = (*gatewayapi.Namespace)(&nsABCD)
 		n := nsObj.DeepCopy()
 		n.Name = nsABCD
 		BeforeEach(func() {
@@ -397,7 +398,7 @@ var _ = Describe("GatewayWebhooks", func() {
 	Context("no httproute is referring,", func() {
 		h := hrObj.DeepCopy()
 		g := gwObj.DeepCopy()
-		h.Spec.CommonRouteSpec.ParentRefs = []gatewayv1beta1.ParentReference{}
+		h.Spec.CommonRouteSpec.ParentRefs = []gatewayapi.ParentReference{}
 		BeforeEach(func() {
 			pkg.ActiveSIGs.SetGateway(g)
 			pkg.ActiveSIGs.SetHTTPRoute(h)
@@ -432,7 +433,7 @@ var _ = Describe("GatewayWebhooks", func() {
 var _ = Describe("HTTPRouteWebhooks", func() {
 	Context("no parentRefs found,", func() {
 		h := hrObj.DeepCopy()
-		h.Spec.ParentRefs = []gatewayv1beta1.ParentReference{}
+		h.Spec.ParentRefs = []gatewayapi.ParentReference{}
 		BeforeEach(func() {
 			pkg.ActiveSIGs.SetHTTPRoute(h)
 		})
@@ -497,7 +498,7 @@ var _ = Describe("HTTPRouteWebhooks", func() {
 
 	Context("backendRefs exists,", func() {
 		h := hrObj.DeepCopy()
-		h.Spec.Rules[0].Filters = []gatewayv1beta1.HTTPRouteFilter{}
+		h.Spec.Rules[0].Filters = []gatewayapi.HTTPRouteFilter{}
 		s := svcObj.DeepCopy()
 		BeforeEach(func() {
 			pkg.ActiveSIGs.SetService(s)
@@ -512,7 +513,7 @@ var _ = Describe("HTTPRouteWebhooks", func() {
 
 	Context("backendRefs not exists,", func() {
 		h := hrObj.DeepCopy()
-		h.Spec.Rules[0].Filters = []gatewayv1beta1.HTTPRouteFilter{}
+		h.Spec.Rules[0].Filters = []gatewayapi.HTTPRouteFilter{}
 		It("creating httproute is not allowed", func() {
 			err := validateHTTPRouteBackendRefs(h)
 			Expect(err).ToNot(Succeed())
@@ -522,7 +523,7 @@ var _ = Describe("HTTPRouteWebhooks", func() {
 
 	Context("extentionRefs exists,", func() {
 		h := hrObj.DeepCopy()
-		h.Spec.Rules[0].BackendRefs = []gatewayv1beta1.HTTPBackendRef{}
+		h.Spec.Rules[0].BackendRefs = []gatewayapi.HTTPBackendRef{}
 		s := svcObj.DeepCopy()
 		BeforeEach(func() {
 			pkg.ActiveSIGs.SetService(s)
@@ -537,7 +538,7 @@ var _ = Describe("HTTPRouteWebhooks", func() {
 
 	Context("extentionRefs not exists,", func() {
 		h := hrObj.DeepCopy()
-		h.Spec.Rules[0].BackendRefs = []gatewayv1beta1.HTTPBackendRef{}
+		h.Spec.Rules[0].BackendRefs = []gatewayapi.HTTPBackendRef{}
 		It("creating httproute is not allowed", func() {
 			err := validateHTTPRouteBackendRefs(h)
 			Expect(err).ToNot(Succeed())
@@ -548,42 +549,42 @@ var _ = Describe("HTTPRouteWebhooks", func() {
 
 var _ = Describe("validate*Types", func() {
 	It("validateServiceType", func() {
-		var g *gatewayv1beta1.Group
-		var k *gatewayv1beta1.Kind
+		var g *gatewayapi.Group
+		var k *gatewayapi.Kind
 
-		g = (*gatewayv1beta1.Group)(&v1.SchemeGroupVersion.Group)
-		k = (*gatewayv1beta1.Kind)(&svcKind)
+		g = (*gatewayapi.Group)(&v1.SchemeGroupVersion.Group)
+		k = (*gatewayapi.Kind)(&svcKind)
 
 		Expect(validateServiceType(nil, nil)).To(Succeed())
 		Expect(validateServiceType(g, nil)).To(Succeed())
 		Expect(validateServiceType(nil, k)).To(Succeed())
 		Expect(validateServiceType(g, k)).To(Succeed())
 
-		k = (*gatewayv1beta1.Kind)(&scrtKind)
+		k = (*gatewayapi.Kind)(&scrtKind)
 		Expect(validateServiceType(g, k)).ToNot(Succeed())
 	})
 
 	It("validateSecretType", func() {
-		var g *gatewayv1beta1.Group
-		var k *gatewayv1beta1.Kind
+		var g *gatewayapi.Group
+		var k *gatewayapi.Kind
 
-		g = (*gatewayv1beta1.Group)(&v1.SchemeGroupVersion.Group)
-		k = (*gatewayv1beta1.Kind)(&scrtKind)
+		g = (*gatewayapi.Group)(&v1.SchemeGroupVersion.Group)
+		k = (*gatewayapi.Kind)(&scrtKind)
 
 		Expect(validateSecretType(nil, nil)).To(Succeed())
 		Expect(validateSecretType(g, nil)).To(Succeed())
 		Expect(validateSecretType(nil, k)).To(Succeed())
 		Expect(validateSecretType(g, k)).To(Succeed())
 
-		k = (*gatewayv1beta1.Kind)(&svcKind)
+		k = (*gatewayapi.Kind)(&svcKind)
 		Expect(validateSecretType(g, k)).ToNot(Succeed())
 	})
 
 	It("validateGatewayType", func() {
-		var g *gatewayv1beta1.Group
-		var k *gatewayv1beta1.Kind
+		var g *gatewayapi.Group
+		var k *gatewayapi.Kind
 
-		g = (*gatewayv1beta1.Group)(&group)
+		g = (*gatewayapi.Group)(&group)
 		k = &gwKind
 
 		Expect(validateGatewayType(nil, nil)).To(Succeed())
@@ -591,7 +592,7 @@ var _ = Describe("validate*Types", func() {
 		Expect(validateGatewayType(nil, k)).To(Succeed())
 		Expect(validateGatewayType(g, k)).To(Succeed())
 
-		k = (*gatewayv1beta1.Kind)(&svcKind)
+		k = (*gatewayapi.Kind)(&svcKind)
 		Expect(validateGatewayType(g, k)).ToNot(Succeed())
 	})
 })
@@ -609,15 +610,15 @@ func Test_rgExists(t *testing.T) {
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{
 				{
-					Group:     gatewayv1beta1.Group(group),
-					Kind:      gatewayv1beta1.Kind(gwKind),
-					Namespace: gatewayv1beta1.Namespace(nsDefault),
+					Group:     gatewayapi.Group(group),
+					Kind:      gatewayapi.Kind(gwKind),
+					Namespace: gatewayapi.Namespace(nsDefault),
 				},
 			},
 			To: []gatewayv1beta1.ReferenceGrantTo{
 				{
 					Group: v1.GroupName,
-					Kind:  gatewayv1beta1.Kind(scrtKind),
+					Kind:  gatewayapi.Kind(scrtKind),
 				},
 			},
 		},
@@ -651,7 +652,7 @@ func Test_rgExists(t *testing.T) {
 				rgf: &rgObj.Spec.From[0],
 				rgt: &gatewayv1beta1.ReferenceGrantTo{
 					Group: "abc",
-					Kind:  gatewayv1beta1.Kind(scrtKind),
+					Kind:  gatewayapi.Kind(scrtKind),
 				},
 			},
 			want: false,
@@ -679,15 +680,15 @@ func Test_canRefer(t *testing.T) {
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{
 				{
-					Group:     gatewayv1beta1.Group(group),
-					Kind:      gatewayv1beta1.Kind(gwKind),
-					Namespace: gatewayv1beta1.Namespace(nsDefault),
+					Group:     gatewayapi.Group(group),
+					Kind:      gatewayapi.Kind(gwKind),
+					Namespace: gatewayapi.Namespace(nsDefault),
 				},
 			},
 			To: []gatewayv1beta1.ReferenceGrantTo{
 				{
 					Group: v1.GroupName,
-					Kind:  gatewayv1beta1.Kind(scrtKind),
+					Kind:  gatewayapi.Kind(scrtKind),
 				},
 			},
 		},

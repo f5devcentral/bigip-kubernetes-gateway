@@ -52,7 +52,8 @@ spec:
         - name: bigip-kubernetes-gateway-controller-pod
           # image: f5devcentral/bigip-kubernetes-gateway:v0.2.1-20230411
           # image: zongzw/bigip-kubernetes-gateway:latest-20230317-150818
-          image: zongzw/bigip-kubernetes-gateway-controller:latest-20231127-213249
+          # image: zongzw/bigip-kubernetes-gateway-controller:latest-20231127-213249
+          image: zongzw/bigip-kubernetes-gateway-controller:latest-20231221-214041
           imagePullPolicy: IfNotPresent
           command: ["/bigip-kubernetes-gateway-controller-linux"]
           args: [

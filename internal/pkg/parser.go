@@ -8,20 +8,20 @@ import (
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/k8s"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	v1 "k8s.io/api/core/v1"
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayv1beta1.Gateway) (map[string]interface{}, error) {
+// func ParseGatewayRelatedForClass(className string, gwObjs []*gatewayapi.Gateway) (map[string]interface{}, error) {
 // 	defer utils.TimeItToPrometheus()()
 
 // 	if gwc := ActiveSIGs.GetGatewayClass(className); gwc == nil ||
-// 		gwc.Spec.ControllerName != gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
+// 		gwc.Spec.ControllerName != gatewayapi.GatewayController(ActiveSIGs.ControllerName) {
 // 		return map[string]interface{}{}, nil
 // 	}
 
-// 	cgwObjs := []*gatewayv1beta1.Gateway{}
+// 	cgwObjs := []*gatewayapi.Gateway{}
 // 	for _, gw := range gwObjs {
-// 		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(className) {
+// 		if gw.Spec.GatewayClassName == gatewayapi.ObjectName(className) {
 // 			cgwObjs = append(cgwObjs, gw)
 // 		}
 // 	}
@@ -46,9 +46,9 @@ import (
 func ParseAllForClass(className string) (map[string]interface{}, error) {
 	defer utils.TimeItToPrometheus()()
 
-	var gwc *gatewayv1beta1.GatewayClass
+	var gwc *gatewayapi.GatewayClass
 	if gwc = ActiveSIGs.GetGatewayClass(className); gwc == nil ||
-		gwc.Spec.ControllerName != gatewayv1beta1.GatewayController(ActiveSIGs.ControllerName) {
+		gwc.Spec.ControllerName != gatewayapi.GatewayController(ActiveSIGs.ControllerName) {
 		return map[string]interface{}{}, nil
 	}
 
@@ -134,7 +134,7 @@ func ParseServices(svcs []string) (map[string]interface{}, error) {
 	return rlts, nil
 }
 
-func parseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[string]interface{}) error {
+func parseHTTPRoute(className string, hr *gatewayapi.HTTPRoute, rlt map[string]interface{}) error {
 	defer utils.TimeItToPrometheus()()
 
 	if hr == nil {
@@ -148,14 +148,14 @@ func parseHTTPRoute(className string, hr *gatewayv1beta1.HTTPRoute, rlt map[stri
 	return nil
 }
 
-func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error {
+func parseGateway(gw *gatewayapi.Gateway, rlt map[string]interface{}) error {
 	defer utils.TimeItToPrometheus()()
 
 	if gw == nil {
 		return nil
 	}
 	irules := map[string][]string{}
-	listeners := map[string]*gatewayv1beta1.Listener{}
+	listeners := map[string]*gatewayapi.Listener{}
 
 	// listener mapping
 	for i, listener := range gw.Spec.Listeners {
@@ -220,7 +220,7 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 
 	// virtual
 	for i, addr := range gw.Spec.Addresses {
-		if *addr.Type == gatewayv1beta1.IPAddressType {
+		if *addr.Type == gatewayapi.IPAddressType {
 			ipaddr := addr.Value
 			for _, listener := range gw.Spec.Listeners {
 				virtual := map[string]interface{}{}
@@ -228,18 +228,18 @@ func parseGateway(gw *gatewayv1beta1.Gateway, rlt map[string]interface{}) error 
 				lsname := gwListenerName(gw, &listener)
 				vrname := fmt.Sprintf("%s.%d", gwListenerName(gw, &listener), i)
 				switch listener.Protocol {
-				case gatewayv1beta1.HTTPProtocolType:
+				case gatewayapi.HTTPProtocolType:
 					virtual["profileHTTP"] = "basic"
 					virtual["class"] = "Service_HTTP"
-				case gatewayv1beta1.HTTPSProtocolType:
+				case gatewayapi.HTTPSProtocolType:
 					virtual["class"] = "Service_HTTPS"
 					virtual["profileHTTP"] = "basic"
 					virtual["serverTLS"] = lsname
-				case gatewayv1beta1.TCPProtocolType:
+				case gatewayapi.TCPProtocolType:
 					return fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
-				case gatewayv1beta1.UDPProtocolType:
+				case gatewayapi.UDPProtocolType:
 					return fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
-				case gatewayv1beta1.TLSProtocolType:
+				case gatewayapi.TLSProtocolType:
 					return fmt.Errorf("unsupported ProtocolType: %s", listener.Protocol)
 				}
 

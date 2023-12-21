@@ -6,12 +6,13 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 func TestReferenceGrantFromTo_ops(t *testing.T) {
 
-	svcName := gatewayv1beta1.ObjectName("test-service")
+	svcName := gatewayapi.ObjectName("test-service")
 	rg := gatewayv1beta1.ReferenceGrant{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -19,9 +20,9 @@ func TestReferenceGrantFromTo_ops(t *testing.T) {
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{
 				{
-					Group:     gatewayv1beta1.GroupName,
-					Kind:      gatewayv1beta1.Kind(reflect.TypeOf(gatewayv1beta1.HTTPRoute{}).Name()),
-					Namespace: gatewayv1beta1.Namespace("default"),
+					Group:     gatewayapi.GroupName,
+					Kind:      gatewayapi.Kind(reflect.TypeOf(gatewayapi.HTTPRoute{}).Name()),
+					Namespace: gatewayapi.Namespace("default"),
 				},
 			},
 		},
@@ -33,7 +34,7 @@ func TestReferenceGrantFromTo_ops(t *testing.T) {
 		rg.Spec.To = []gatewayv1beta1.ReferenceGrantTo{
 			{
 				Group: "",
-				Kind:  gatewayv1beta1.Kind(reflect.TypeOf(v1.Service{}).Name()),
+				Kind:  gatewayapi.Kind(reflect.TypeOf(v1.Service{}).Name()),
 				Name:  &svcName,
 			},
 		}
@@ -55,7 +56,7 @@ func TestReferenceGrantFromTo_ops(t *testing.T) {
 		rg.Spec.To = []gatewayv1beta1.ReferenceGrantTo{
 			{
 				Group: "",
-				Kind:  gatewayv1beta1.Kind(reflect.TypeOf(v1.Service{}).Name()),
+				Kind:  gatewayapi.Kind(reflect.TypeOf(v1.Service{}).Name()),
 			},
 		}
 		rgft.set(&rg)
@@ -74,19 +75,19 @@ func TestReferenceGrantFromTo_ops(t *testing.T) {
 
 		rgft := &ReferenceGrantFromTo{}
 		rg.Spec.From = append(rg.Spec.From, gatewayv1beta1.ReferenceGrantFrom{
-			Group:     gatewayv1beta1.GroupName,
-			Kind:      gatewayv1beta1.Kind(reflect.TypeOf(gatewayv1beta1.Gateway{}).Name()),
+			Group:     gatewayapi.GroupName,
+			Kind:      gatewayapi.Kind(reflect.TypeOf(gatewayapi.Gateway{}).Name()),
 			Namespace: "abcd",
 		})
 		rg.Spec.To = []gatewayv1beta1.ReferenceGrantTo{
 			{
 				Group: "",
-				Kind:  gatewayv1beta1.Kind(reflect.TypeOf(v1.Service{}).Name()),
+				Kind:  gatewayapi.Kind(reflect.TypeOf(v1.Service{}).Name()),
 			},
 		}
 		rg.Spec.To = append(rg.Spec.To, gatewayv1beta1.ReferenceGrantTo{
 			Group: "",
-			Kind:  gatewayv1beta1.Kind(reflect.TypeOf(v1.Service{}).Name()),
+			Kind:  gatewayapi.Kind(reflect.TypeOf(v1.Service{}).Name()),
 			Name:  &svcName,
 		})
 		rgft.set(&rg)

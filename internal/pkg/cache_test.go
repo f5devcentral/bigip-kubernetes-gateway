@@ -8,6 +8,7 @@ import (
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -17,10 +18,10 @@ func TestSIGCache_SetGetExist(t *testing.T) {
 		ReferenceGrant: map[string]*gatewayv1beta1.ReferenceGrant{},
 	}
 
-	hr := gatewayv1beta1.HTTPRoute{
+	hr := gatewayapi.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: gatewayv1beta1.SchemeGroupVersion.String(),
-			Kind:       reflect.TypeOf(gatewayv1beta1.HTTPRoute{}).Name(),
+			APIVersion: gatewayapi.SchemeGroupVersion.String(),
+			Kind:       reflect.TypeOf(gatewayapi.HTTPRoute{}).Name(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "A",
@@ -47,16 +48,16 @@ func TestSIGCache_SetGetExist(t *testing.T) {
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{
 				{
-					Group:     gatewayv1beta1.GroupName,
-					Kind:      gatewayv1beta1.Kind(reflect.TypeOf(hr).Name()),
-					Namespace: gatewayv1beta1.Namespace(hr.Namespace),
+					Group:     gatewayapi.GroupName,
+					Kind:      gatewayapi.Kind(reflect.TypeOf(hr).Name()),
+					Namespace: gatewayapi.Namespace(hr.Namespace),
 				},
 			},
 			To: []gatewayv1beta1.ReferenceGrantTo{
 				{
-					Group: gatewayv1beta1.Group(svc.GroupVersionKind().Group),
-					Kind:  gatewayv1beta1.Kind(svc.GroupVersionKind().Kind),
-					Name:  (*gatewayv1beta1.ObjectName)(&svc.Name),
+					Group: gatewayapi.Group(svc.GroupVersionKind().Group),
+					Kind:  gatewayapi.Kind(svc.GroupVersionKind().Kind),
+					Name:  (*gatewayapi.ObjectName)(&svc.Name),
 				},
 			},
 		},
@@ -74,8 +75,8 @@ func TestSIGCache_SetGetExist(t *testing.T) {
 
 	rg.Spec.To = []gatewayv1beta1.ReferenceGrantTo{
 		{
-			Group: gatewayv1beta1.Group(svc.GroupVersionKind().Group),
-			Kind:  gatewayv1beta1.Kind(svc.GroupVersionKind().Kind),
+			Group: gatewayapi.Group(svc.GroupVersionKind().Group),
+			Kind:  gatewayapi.Kind(svc.GroupVersionKind().Kind),
 		},
 	}
 	c.SetReferenceGrant(&rg)

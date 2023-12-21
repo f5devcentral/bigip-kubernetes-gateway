@@ -11,6 +11,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -50,7 +51,7 @@ func ValidateGivenKeys(keys []string) error {
 	}
 }
 
-func validateListenersTLSCertificateRefs(gw *gatewayv1beta1.Gateway) error {
+func validateListenersTLSCertificateRefs(gw *gatewayapi.Gateway) error {
 
 	invalidRefs, invalidTypes := []string{}, []string{}
 
@@ -61,7 +62,7 @@ func validateListenersTLSCertificateRefs(gw *gatewayv1beta1.Gateway) error {
 	}
 
 	for _, ls := range gw.Spec.Listeners {
-		if ls.Protocol != gatewayv1beta1.HTTPSProtocolType {
+		if ls.Protocol != gatewayapi.HTTPSProtocolType {
 			continue
 		}
 		if ls.TLS == nil { // may never happen
@@ -69,7 +70,7 @@ func validateListenersTLSCertificateRefs(gw *gatewayv1beta1.Gateway) error {
 			continue
 		}
 
-		if ls.TLS.Mode != nil && *ls.TLS.Mode != gatewayv1beta1.TLSModeTerminate {
+		if ls.TLS.Mode != nil && *ls.TLS.Mode != gatewayapi.TLSModeTerminate {
 			continue
 		}
 		for _, ref := range ls.TLS.CertificateRefs {
@@ -99,7 +100,7 @@ func validateListenersTLSCertificateRefs(gw *gatewayv1beta1.Gateway) error {
 	return fmtInvalids(invalidRefs, invalidTypes)
 }
 
-func validateHTTPRouteParentRefs(hr *gatewayv1beta1.HTTPRoute) error {
+func validateHTTPRouteParentRefs(hr *gatewayapi.HTTPRoute) error {
 
 	invalidRefs, invalidTypes := []string{}, []string{}
 	for _, pr := range hr.Spec.ParentRefs {
@@ -116,7 +117,7 @@ func validateHTTPRouteParentRefs(hr *gatewayv1beta1.HTTPRoute) error {
 			continue
 		}
 		gwkey := utils.Keyname(ns, string(pr.Name))
-		var gw gatewayv1beta1.Gateway
+		var gw gatewayapi.Gateway
 		err := objectFromMgrCache(gwkey, &gw)
 		if err != nil {
 			invalidRefs = append(invalidRefs, fmt.Sprintf("no gateway '%s' found", gwkey))
@@ -137,7 +138,7 @@ func validateHTTPRouteParentRefs(hr *gatewayv1beta1.HTTPRoute) error {
 	return fmtInvalids(invalidRefs, invalidTypes)
 }
 
-func validateHTTPRouteBackendRefs(hr *gatewayv1beta1.HTTPRoute) error {
+func validateHTTPRouteBackendRefs(hr *gatewayapi.HTTPRoute) error {
 
 	var rgs gatewayv1beta1.ReferenceGrantList
 	err := WebhookManager.GetCache().List(context.TODO(), &rgs, &client.ListOptions{})
@@ -168,7 +169,7 @@ func validateHTTPRouteBackendRefs(hr *gatewayv1beta1.HTTPRoute) error {
 	}
 	for _, rl := range hr.Spec.Rules {
 		for _, fl := range rl.Filters {
-			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
+			if fl.Type == gatewayapi.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
 				er := fl.ExtensionRef
 
 				if err := validateServiceType(&er.Group, &er.Kind); err != nil {
@@ -191,20 +192,20 @@ func validateHTTPRouteBackendRefs(hr *gatewayv1beta1.HTTPRoute) error {
 	return fmtInvalids(invalidRefs, invalidTypes)
 }
 
-func validateGatewayClassIsReferred(gwc *gatewayv1beta1.GatewayClass) error {
+func validateGatewayClassIsReferred(gwc *gatewayapi.GatewayClass) error {
 	if gwc == nil {
 		return nil
 	}
 
-	var gwList gatewayv1beta1.GatewayList
+	var gwList gatewayapi.GatewayList
 	err := WebhookManager.GetCache().List(context.TODO(), &gwList, &client.ListOptions{})
 	if err != nil {
 		return err
 	}
 
-	gws := []*gatewayv1beta1.Gateway{}
+	gws := []*gatewayapi.Gateway{}
 	for _, gw := range gwList.Items {
-		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(gwc.Name) {
+		if gw.Spec.GatewayClassName == gatewayapi.ObjectName(gwc.Name) {
 			gws = append(gws, &gw)
 		}
 	}
@@ -219,11 +220,11 @@ func validateGatewayClassIsReferred(gwc *gatewayv1beta1.GatewayClass) error {
 	}
 }
 
-func gwListenerName(gw *gatewayv1beta1.Gateway, ls *gatewayv1beta1.Listener) string {
+func gwListenerName(gw *gatewayapi.Gateway, ls *gatewayapi.Listener) string {
 	return strings.Join([]string{"gw", gw.Namespace, gw.Name, string(ls.Name)}, ".")
 }
 
-func hrParentName(hr *gatewayv1beta1.HTTPRoute, pr *gatewayv1beta1.ParentReference) string {
+func hrParentName(hr *gatewayapi.HTTPRoute, pr *gatewayapi.ParentReference) string {
 	ns := hr.Namespace
 	if pr.Namespace != nil {
 		ns = string(*pr.Namespace)
@@ -235,19 +236,19 @@ func hrParentName(hr *gatewayv1beta1.HTTPRoute, pr *gatewayv1beta1.ParentReferen
 	return strings.Join([]string{"gw", ns, string(pr.Name), sn}, ".")
 }
 
-func validateGatewayIsReferred(gw *gatewayv1beta1.Gateway) error {
+func validateGatewayIsReferred(gw *gatewayapi.Gateway) error {
 
 	if gw == nil {
 		return nil
 	}
 
-	listeners := map[string]*gatewayv1beta1.Listener{}
+	listeners := map[string]*gatewayapi.Listener{}
 	for _, ls := range gw.Spec.Listeners {
 		lskey := gwListenerName(gw, &ls)
 		listeners[lskey] = ls.DeepCopy()
 	}
 
-	var hrList gatewayv1beta1.HTTPRouteList
+	var hrList gatewayapi.HTTPRouteList
 	err := WebhookManager.GetCache().List(context.TODO(), &hrList, &client.ListOptions{})
 	if err != nil {
 		return err
@@ -263,7 +264,7 @@ func validateGatewayIsReferred(gw *gatewayv1beta1.Gateway) error {
 		nsmap[ns.Name] = &ns
 	}
 
-	hrs := []*gatewayv1beta1.HTTPRoute{}
+	hrs := []*gatewayapi.HTTPRoute{}
 
 	for _, hr := range hrList.Items {
 		for _, pr := range hr.Spec.ParentRefs {
@@ -294,9 +295,9 @@ func validateGatewayIsReferred(gw *gatewayv1beta1.Gateway) error {
 	}
 }
 
-func validateGatewayClassExists(gw *gatewayv1beta1.Gateway) error {
+func validateGatewayClassExists(gw *gatewayapi.Gateway) error {
 	className := gw.Spec.GatewayClassName
-	var gwc gatewayv1beta1.GatewayClass
+	var gwc gatewayapi.GatewayClass
 	err := objectFromMgrCache(string(className), &gwc)
 	if err != nil {
 		return fmt.Errorf("gatewayclass '%s' not found", className)
@@ -305,7 +306,7 @@ func validateGatewayClassExists(gw *gatewayv1beta1.Gateway) error {
 	}
 }
 
-func validateServiceType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind) error {
+func validateServiceType(group *gatewayapi.Group, kind *gatewayapi.Kind) error {
 	g, k := v1.GroupName, reflect.TypeOf(v1.Service{}).Name()
 	if group != nil {
 		g = string(*group)
@@ -319,7 +320,7 @@ func validateServiceType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind)
 	return nil
 }
 
-func validateSecretType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind) error {
+func validateSecretType(group *gatewayapi.Group, kind *gatewayapi.Kind) error {
 	g, k := v1.GroupName, reflect.TypeOf(v1.Secret{}).Name()
 	if group != nil {
 		g = string(*group)
@@ -333,16 +334,16 @@ func validateSecretType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind) 
 	return nil
 }
 
-func validateGatewayType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind) error {
-	g := gatewayv1beta1.GroupName
+func validateGatewayType(group *gatewayapi.Group, kind *gatewayapi.Kind) error {
+	g := gatewayapi.GroupName
 	if group != nil {
 		g = string(*group)
 	}
-	k := reflect.TypeOf(gatewayv1beta1.Gateway{}).Name()
+	k := reflect.TypeOf(gatewayapi.Gateway{}).Name()
 	if kind != nil {
 		k = string(*kind)
 	}
-	if g != gatewayv1beta1.GroupName || k != reflect.TypeOf(gatewayv1beta1.Gateway{}).Name() {
+	if g != gatewayapi.GroupName || k != reflect.TypeOf(gatewayapi.Gateway{}).Name() {
 		return fmt.Errorf("not Gateway type: '%s'", utils.Keyname(g, k))
 	}
 	return nil
@@ -392,28 +393,28 @@ func canRefer(rgs *gatewayv1beta1.ReferenceGrantList, from, to client.Object) bo
 	}
 
 	fromgvk := client.Object.GetObjectKind(from).GroupVersionKind()
-	if fromgvk.Group != gatewayv1beta1.GroupName {
+	if fromgvk.Group != gatewayapi.GroupName {
 		return false
 	}
 	rgf := gatewayv1beta1.ReferenceGrantFrom{
-		Group:     gatewayv1beta1.Group(fromgvk.Group),
-		Kind:      gatewayv1beta1.Kind(fromgvk.Kind),
-		Namespace: gatewayv1beta1.Namespace(fromns),
+		Group:     gatewayapi.Group(fromgvk.Group),
+		Kind:      gatewayapi.Kind(fromgvk.Kind),
+		Namespace: gatewayapi.Namespace(fromns),
 	}
 	// f := stringifyRGFrom(&rgf)
 
 	togvk := client.Object.GetObjectKind(to).GroupVersionKind()
-	toname := gatewayv1beta1.ObjectName(client.Object.GetName(to))
+	toname := gatewayapi.ObjectName(client.Object.GetName(to))
 	rgt := gatewayv1beta1.ReferenceGrantTo{
-		Group: gatewayv1beta1.Group(togvk.Group),
-		Kind:  gatewayv1beta1.Kind(togvk.Kind),
+		Group: gatewayapi.Group(togvk.Group),
+		Kind:  gatewayapi.Kind(togvk.Kind),
 		Name:  &toname,
 	}
 	// t := stringifyRGTo(&rgt, tons)
 
 	rgtAll := gatewayv1beta1.ReferenceGrantTo{
-		Group: gatewayv1beta1.Group(togvk.Group),
-		Kind:  gatewayv1beta1.Kind(togvk.Kind),
+		Group: gatewayapi.Group(togvk.Group),
+		Kind:  gatewayapi.Kind(togvk.Kind),
 	}
 	// toAll := stringifyRGTo(&rgtAll, tons)
 

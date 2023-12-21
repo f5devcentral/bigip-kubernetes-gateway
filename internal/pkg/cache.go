@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +43,7 @@ func (c *SIGCache) GetNamespace(keyname string) *v1.Namespace {
 	return c.Namespace[keyname]
 }
 
-func (c *SIGCache) SetGatewayClass(obj *gatewayv1beta1.GatewayClass) {
+func (c *SIGCache) SetGatewayClass(obj *gatewayapi.GatewayClass) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -58,14 +59,14 @@ func (c *SIGCache) UnsetGatewayClass(keyname string) {
 	delete(c.GatewayClass, keyname)
 }
 
-func (c *SIGCache) GetGatewayClass(keyname string) *gatewayv1beta1.GatewayClass {
+func (c *SIGCache) GetGatewayClass(keyname string) *gatewayapi.GatewayClass {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	return c.GatewayClass[keyname]
 }
 
-func (c *SIGCache) SetGateway(obj *gatewayv1beta1.Gateway) {
+func (c *SIGCache) SetGateway(obj *gatewayapi.Gateway) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -81,14 +82,14 @@ func (c *SIGCache) UnsetGateway(keyname string) {
 	delete(c.Gateway, keyname)
 }
 
-func (c *SIGCache) GetGateway(keyname string) *gatewayv1beta1.Gateway {
+func (c *SIGCache) GetGateway(keyname string) *gatewayapi.Gateway {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	return c.Gateway[keyname]
 }
 
-func (c *SIGCache) SetHTTPRoute(obj *gatewayv1beta1.HTTPRoute) {
+func (c *SIGCache) SetHTTPRoute(obj *gatewayapi.HTTPRoute) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -104,7 +105,7 @@ func (c *SIGCache) UnsetHTTPRoute(keyname string) {
 	delete(c.HTTPRoute, keyname)
 }
 
-func (c *SIGCache) GetHTTPRoute(keyname string) *gatewayv1beta1.HTTPRoute {
+func (c *SIGCache) GetHTTPRoute(keyname string) *gatewayapi.HTTPRoute {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -225,7 +226,7 @@ func (c *SIGCache) GetReferenceGrant(keyname string) *gatewayv1beta1.ReferenceGr
 	return c.ReferenceGrant[keyname]
 }
 
-func (c *SIGCache) AttachedGateways(gwc *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) AttachedGateways(gwc *gatewayapi.GatewayClass) []*gatewayapi.Gateway {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
@@ -234,21 +235,21 @@ func (c *SIGCache) AttachedGateways(gwc *gatewayv1beta1.GatewayClass) []*gateway
 	return c._attachedGateways(gwc)
 }
 
-func (c *SIGCache) _attachedGateways(gwc *gatewayv1beta1.GatewayClass) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) _attachedGateways(gwc *gatewayapi.GatewayClass) []*gatewayapi.Gateway {
 	if gwc == nil {
-		return []*gatewayv1beta1.Gateway{}
+		return []*gatewayapi.Gateway{}
 	}
 
-	gws := []*gatewayv1beta1.Gateway{}
+	gws := []*gatewayapi.Gateway{}
 	for _, gw := range c.Gateway {
-		if gw.Spec.GatewayClassName == gatewayv1beta1.ObjectName(gwc.Name) {
+		if gw.Spec.GatewayClassName == gatewayapi.ObjectName(gwc.Name) {
 			gws = append(gws, gw)
 		}
 	}
 	return gws
 }
 
-func (c *SIGCache) GatewayRefsOfHR(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) GatewayRefsOfHR(hr *gatewayapi.HTTPRoute) []*gatewayapi.Gateway {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
@@ -257,13 +258,13 @@ func (c *SIGCache) GatewayRefsOfHR(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1bet
 	return c._gatewayRefsOfHR(hr)
 }
 
-func (c *SIGCache) _gatewayRefsOfHR(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) _gatewayRefsOfHR(hr *gatewayapi.HTTPRoute) []*gatewayapi.Gateway {
 	defer utils.TimeItToPrometheus()()
 
 	if hr == nil {
-		return []*gatewayv1beta1.Gateway{}
+		return []*gatewayapi.Gateway{}
 	}
-	gws := []*gatewayv1beta1.Gateway{}
+	gws := []*gatewayapi.Gateway{}
 	for _, pr := range hr.Spec.ParentRefs {
 		ns := hr.Namespace
 		if pr.Namespace != nil {
@@ -287,31 +288,31 @@ func (c *SIGCache) _gatewayRefsOfHR(hr *gatewayv1beta1.HTTPRoute) []*gatewayv1be
 	return gws
 }
 
-func (c *SIGCache) GatewayRefsOfSecret(scrt *v1.Secret) ([]*gatewayv1beta1.Gateway, error) {
+func (c *SIGCache) GatewayRefsOfSecret(scrt *v1.Secret) ([]*gatewayapi.Gateway, error) {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	if scrt == nil {
-		return []*gatewayv1beta1.Gateway{}, nil
+		return []*gatewayapi.Gateway{}, nil
 	}
-	gws := []*gatewayv1beta1.Gateway{}
+	gws := []*gatewayapi.Gateway{}
 
 	for _, gw := range c.Gateway {
 		for i, found := 0, false; i < len(gw.Spec.Listeners) && !found; i++ {
 			listener := gw.Spec.Listeners[i]
-			if listener.Protocol == gatewayv1beta1.HTTPSProtocolType {
+			if listener.Protocol == gatewayapi.HTTPSProtocolType {
 				if listener.TLS == nil {
 					return gws, fmt.Errorf("invalid tls setting in listener")
 				}
-				if listener.TLS.Mode == nil || *listener.TLS.Mode == gatewayv1beta1.TLSModeTerminate {
+				if listener.TLS.Mode == nil || *listener.TLS.Mode == gatewayapi.TLSModeTerminate {
 					for _, ref := range listener.TLS.CertificateRefs {
 						ns := gw.Namespace
 						if ref.Namespace != nil {
 							ns = string(*ref.Namespace)
 						}
-						if ns == scrt.Namespace && ref.Name == gatewayv1beta1.ObjectName(scrt.Name) {
+						if ns == scrt.Namespace && ref.Name == gatewayapi.ObjectName(scrt.Name) {
 							if err := validateSecretType(ref.Group, ref.Kind); err == nil {
 								if !c._canRefer(gw, scrt) {
 									return gws, fmt.Errorf("'%s' cannot refer to secret '%s'",
@@ -333,7 +334,7 @@ func (c *SIGCache) GatewayRefsOfSecret(scrt *v1.Secret) ([]*gatewayv1beta1.Gatew
 	return gws, nil
 }
 
-func (c *SIGCache) AttachedSecrets(gw *gatewayv1beta1.Gateway) (map[string][]*v1.Secret, error) {
+func (c *SIGCache) AttachedSecrets(gw *gatewayapi.Gateway) (map[string][]*v1.Secret, error) {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
@@ -349,11 +350,11 @@ func (c *SIGCache) AttachedSecrets(gw *gatewayv1beta1.Gateway) (map[string][]*v1
 		if _, ok := rlt[lsname]; !ok {
 			rlt[lsname] = []*v1.Secret{}
 		}
-		if listener.Protocol == gatewayv1beta1.HTTPSProtocolType {
+		if listener.Protocol == gatewayapi.HTTPSProtocolType {
 			if listener.TLS == nil {
 				return rlt, fmt.Errorf("invalid listener.TLS setting")
 			}
-			if listener.TLS.Mode == nil || *listener.TLS.Mode == gatewayv1beta1.TLSModeTerminate {
+			if listener.TLS.Mode == nil || *listener.TLS.Mode == gatewayapi.TLSModeTerminate {
 				for _, ref := range listener.TLS.CertificateRefs {
 					ns := gw.Namespace
 					if ref.Namespace != nil {
@@ -376,7 +377,7 @@ func (c *SIGCache) AttachedSecrets(gw *gatewayv1beta1.Gateway) (map[string][]*v1
 	return rlt, nil
 }
 
-func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.HTTPRoute {
+func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayapi.Gateway) []*gatewayapi.HTTPRoute {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
@@ -385,18 +386,18 @@ func (c *SIGCache) AttachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1be
 	return c._attachedHTTPRoutes(gw)
 }
 
-func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.HTTPRoute {
+func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayapi.Gateway) []*gatewayapi.HTTPRoute {
 	if gw == nil {
-		return []*gatewayv1beta1.HTTPRoute{}
+		return []*gatewayapi.HTTPRoute{}
 	}
 
-	listeners := map[string]*gatewayv1beta1.Listener{}
+	listeners := map[string]*gatewayapi.Listener{}
 	for _, ls := range gw.Spec.Listeners {
 		lskey := gwListenerName(gw, &ls)
 		listeners[lskey] = ls.DeepCopy()
 	}
 
-	hrs := []*gatewayv1beta1.HTTPRoute{}
+	hrs := []*gatewayapi.HTTPRoute{}
 	for _, hr := range c.HTTPRoute {
 		for _, pr := range hr.Spec.ParentRefs {
 			ns := hr.Namespace
@@ -417,7 +418,7 @@ func (c *SIGCache) _attachedHTTPRoutes(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 	return hrs
 }
 
-func (c *SIGCache) AttachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
+func (c *SIGCache) AttachedServices(hr *gatewayapi.HTTPRoute) []*v1.Service {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
@@ -426,7 +427,7 @@ func (c *SIGCache) AttachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service 
 	return c._attachedServices(hr)
 }
 
-func (c *SIGCache) _attachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service {
+func (c *SIGCache) _attachedServices(hr *gatewayapi.HTTPRoute) []*v1.Service {
 	if hr == nil {
 		return []*v1.Service{}
 	}
@@ -445,7 +446,7 @@ func (c *SIGCache) _attachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service
 	}
 	for _, rl := range hr.Spec.Rules {
 		for _, fl := range rl.Filters {
-			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
+			if fl.Type == gatewayapi.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
 				er := fl.ExtensionRef
 				if er.Group == "" && er.Kind == "Service" {
 					if svc, ok := c.Service[utils.Keyname(hr.Namespace, string(er.Name))]; ok && c._canRefer(hr, svc) {
@@ -480,7 +481,7 @@ func (c *SIGCache) _attachedServices(hr *gatewayv1beta1.HTTPRoute) []*v1.Service
 // 	return rlt
 // }
 
-func (c *SIGCache) RelatedServices(gwc *gatewayv1beta1.GatewayClass) []*v1.Service {
+func (c *SIGCache) RelatedServices(gwc *gatewayapi.GatewayClass) []*v1.Service {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
@@ -496,20 +497,20 @@ func (c *SIGCache) RelatedServices(gwc *gatewayv1beta1.GatewayClass) []*v1.Servi
 	return svcs
 }
 
-func (c *SIGCache) AllHTTPRoutes() []*gatewayv1beta1.HTTPRoute {
+func (c *SIGCache) AllHTTPRoutes() []*gatewayapi.HTTPRoute {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	hrs := []*gatewayv1beta1.HTTPRoute{}
+	hrs := []*gatewayapi.HTTPRoute{}
 	for _, hr := range c.HTTPRoute {
 		hrs = append(hrs, hr)
 	}
 	return hrs
 }
 
-func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
+func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayapi.HTTPRoute {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
@@ -518,14 +519,14 @@ func (c *SIGCache) HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute
 	return c._HTTPRoutesRefsOf(svc)
 }
 
-func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRoute {
+func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayapi.HTTPRoute {
 	if svc == nil {
-		return []*gatewayv1beta1.HTTPRoute{}
+		return []*gatewayapi.HTTPRoute{}
 	}
 
 	// To performance perspective, it may be good.
 	// But the implementation is similiar to _attachedServices, would easily introduce issues.
-	// refered := func(hr *gatewayv1beta1.HTTPRoute) bool {
+	// refered := func(hr *gatewayapi.HTTPRoute) bool {
 	// 	for _, rl := range hr.Spec.Rules {
 	// 		for _, br := range rl.BackendRefs {
 	// 			ns := hr.Namespace
@@ -539,7 +540,7 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 	// 	}
 	// 	for _, rl := range hr.Spec.Rules {
 	// 		for _, fl := range rl.Filters {
-	// 			if fl.Type == gatewayv1beta1.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
+	// 			if fl.Type == gatewayapi.HTTPRouteFilterExtensionRef && fl.ExtensionRef != nil {
 	// 				er := fl.ExtensionRef
 	// 				if er.Group == "" && er.Kind == "Service" {
 	// 					if utils.Keyname(hr.Namespace, string(er.Name)) == utils.Keyname(svc.Namespace, svc.Name) {
@@ -565,7 +566,7 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 	}
 	hrKeys = utils.Unified(hrKeys)
 
-	hrs := []*gatewayv1beta1.HTTPRoute{}
+	hrs := []*gatewayapi.HTTPRoute{}
 	for _, hrk := range hrKeys {
 		hrs = append(hrs, c.HTTPRoute[hrk])
 	}
@@ -574,13 +575,13 @@ func (c *SIGCache) _HTTPRoutesRefsOf(svc *v1.Service) []*gatewayv1beta1.HTTPRout
 }
 
 // GetNeighborGateways get neighbor gateways(itself is not included) for all gateway class.
-func (c *SIGCache) GetNeighborGateways(gw *gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) GetNeighborGateways(gw *gatewayapi.Gateway) []*gatewayapi.Gateway {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	gwmap := map[string]*gatewayv1beta1.Gateway{}
+	gwmap := map[string]*gatewayapi.Gateway{}
 	hrs := c._attachedHTTPRoutes(gw)
 	for _, hr := range hrs {
 		gws := c._gatewayRefsOfHR(hr)
@@ -593,7 +594,7 @@ func (c *SIGCache) GetNeighborGateways(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 	}
 
 	delete(gwmap, utils.Keyname(gw.Namespace, gw.Name))
-	rlt := []*gatewayv1beta1.Gateway{}
+	rlt := []*gatewayapi.Gateway{}
 	for _, gw := range gwmap {
 		rlt = append(rlt, gw)
 	}
@@ -601,13 +602,13 @@ func (c *SIGCache) GetNeighborGateways(gw *gatewayv1beta1.Gateway) []*gatewayv1b
 	return rlt
 }
 
-func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayapi.Gateway {
 	defer utils.TimeItToPrometheus()()
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	gwmap := map[string]*gatewayv1beta1.Gateway{}
+	gwmap := map[string]*gatewayapi.Gateway{}
 
 	for _, svc := range svcs {
 		hrs := c._HTTPRoutesRefsOf(svc)
@@ -618,7 +619,7 @@ func (c *SIGCache) GetRootGateways(svcs []*v1.Service) []*gatewayv1beta1.Gateway
 			}
 		}
 	}
-	rlt := []*gatewayv1beta1.Gateway{}
+	rlt := []*gatewayapi.Gateway{}
 	for _, gw := range gwmap {
 		rlt = append(rlt, gw)
 	}
@@ -669,17 +670,17 @@ func (c *SIGCache) NSImpactedGatewayClasses(ns *v1.Namespace) []string {
 	return utils.Unified(names)
 }
 
-func (c *SIGCache) _rgImpactedGateways(rg *gatewayv1beta1.ReferenceGrant) []*gatewayv1beta1.Gateway {
+func (c *SIGCache) _rgImpactedGateways(rg *gatewayv1beta1.ReferenceGrant) []*gatewayapi.Gateway {
 	defer utils.TimeItToPrometheus()()
 
-	rlt := []*gatewayv1beta1.Gateway{}
+	rlt := []*gatewayapi.Gateway{}
 	if rg == nil {
 		return rlt
 	}
 
 	for _, f := range rg.Spec.From {
-		if gatewayv1beta1.GroupName == f.Group &&
-			reflect.TypeOf(gatewayv1beta1.Gateway{}).Name() == string(f.Kind) {
+		if gatewayapi.GroupName == f.Group &&
+			reflect.TypeOf(gatewayapi.Gateway{}).Name() == string(f.Kind) {
 			for _, gw := range c.Gateway {
 				if gw.Namespace == string(f.Namespace) {
 					rlt = append(rlt, gw)
@@ -691,17 +692,17 @@ func (c *SIGCache) _rgImpactedGateways(rg *gatewayv1beta1.ReferenceGrant) []*gat
 	return rlt
 }
 
-func (c *SIGCache) _rgImpactedHTTPRoutes(rg *gatewayv1beta1.ReferenceGrant) []*gatewayv1beta1.HTTPRoute {
+func (c *SIGCache) _rgImpactedHTTPRoutes(rg *gatewayv1beta1.ReferenceGrant) []*gatewayapi.HTTPRoute {
 	defer utils.TimeItToPrometheus()()
 
-	rlt := []*gatewayv1beta1.HTTPRoute{}
+	rlt := []*gatewayapi.HTTPRoute{}
 	if rg == nil {
 		return rlt
 	}
 
 	for _, f := range rg.Spec.From {
-		if gatewayv1beta1.GroupName == f.Group &&
-			reflect.TypeOf(gatewayv1beta1.HTTPRoute{}).Name() == string(f.Kind) {
+		if gatewayapi.GroupName == f.Group &&
+			reflect.TypeOf(gatewayapi.HTTPRoute{}).Name() == string(f.Kind) {
 			for _, hr := range c.HTTPRoute {
 				if hr.Namespace == string(f.Namespace) {
 					rlt = append(rlt, hr)
@@ -728,28 +729,28 @@ func (c *SIGCache) _canRefer(from, to client.Object) bool {
 	}
 
 	fromgvk := client.Object.GetObjectKind(from).GroupVersionKind()
-	if fromgvk.Group != gatewayv1beta1.GroupName {
+	if fromgvk.Group != gatewayapi.GroupName {
 		return false
 	}
 	rgf := gatewayv1beta1.ReferenceGrantFrom{
-		Group:     gatewayv1beta1.Group(fromgvk.Group),
-		Kind:      gatewayv1beta1.Kind(fromgvk.Kind),
-		Namespace: gatewayv1beta1.Namespace(fromns),
+		Group:     gatewayapi.Group(fromgvk.Group),
+		Kind:      gatewayapi.Kind(fromgvk.Kind),
+		Namespace: gatewayapi.Namespace(fromns),
 	}
 	f := stringifyRGFrom(&rgf)
 
 	togvk := client.Object.GetObjectKind(to).GroupVersionKind()
-	toname := gatewayv1beta1.ObjectName(client.Object.GetName(to))
+	toname := gatewayapi.ObjectName(client.Object.GetName(to))
 	rgt := gatewayv1beta1.ReferenceGrantTo{
-		Group: gatewayv1beta1.Group(togvk.Group),
-		Kind:  gatewayv1beta1.Kind(togvk.Kind),
+		Group: gatewayapi.Group(togvk.Group),
+		Kind:  gatewayapi.Kind(togvk.Kind),
 		Name:  &toname,
 	}
 	t := stringifyRGTo(&rgt, tons)
 
 	rgtAll := gatewayv1beta1.ReferenceGrantTo{
-		Group: gatewayv1beta1.Group(togvk.Group),
-		Kind:  gatewayv1beta1.Kind(togvk.Kind),
+		Group: gatewayapi.Group(togvk.Group),
+		Kind:  gatewayapi.Kind(togvk.Kind),
 	}
 	toAll := stringifyRGTo(&rgtAll, tons)
 
@@ -830,7 +831,7 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	slog := utils.LogFromContext(context.TODO()).WithLevel(LogLevel)
 
 	checkAndWaitCacheStarted := func() error {
-		var gtwList gatewayv1beta1.GatewayList
+		var gtwList gatewayapi.GatewayList
 		for {
 			if err := mgr.GetCache().List(context.TODO(), &gtwList, &client.ListOptions{}); err != nil {
 				if reflect.DeepEqual(err, &cache.ErrCacheNotStarted{}) {
@@ -852,16 +853,16 @@ func (c *SIGCache) syncGatewayResources(mgr manager.Manager) error {
 	}
 
 	slog.Debugf("starting to sync resources")
-	var gwcList gatewayv1beta1.GatewayClassList
-	var gtwList gatewayv1beta1.GatewayList
-	var hrList gatewayv1beta1.HTTPRouteList
+	var gwcList gatewayapi.GatewayClassList
+	var gtwList gatewayapi.GatewayList
+	var hrList gatewayapi.HTTPRouteList
 	var rgList gatewayv1beta1.ReferenceGrantList
 
 	if err := mgr.GetCache().List(context.TODO(), &gwcList, &client.ListOptions{}); err != nil {
 		return err
 	} else {
 		for _, gwc := range gwcList.Items {
-			if gwc.Spec.ControllerName == gatewayv1beta1.GatewayController(c.ControllerName) {
+			if gwc.Spec.ControllerName == gatewayapi.GatewayController(c.ControllerName) {
 				slog.Debugf("found gatewayclass %s", gwc.Name)
 				c.GatewayClass[gwc.Name] = gwc.DeepCopy()
 			} else {

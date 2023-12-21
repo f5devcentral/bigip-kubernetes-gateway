@@ -26,8 +26,6 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,14 +35,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	// "github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/webhooks"
-	f5_bigip "github.com/f5devcentral/f5-bigip-rest-go/bigip"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 
 	//+kubebuilder:scaffold:imports
 
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -57,6 +57,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(gatewayapi.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1beta1.AddToScheme(scheme))
 }
 
@@ -98,11 +99,15 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	var err error
+
+	whServer := webhook.NewServer(webhook.Options{
+		Port:    9443,
+		CertDir: cmdflags.CertDir,
+	})
 	webhooks.WebhookManager, err = ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
-		CertDir:                cmdflags.CertDir,
+		WebhookServer:          whServer,
+		Metrics:                server.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "303cfed9.f5.com",
@@ -123,11 +128,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	prometheus.MustRegister(utils.FunctionDurationTimeCostCount)
-	prometheus.MustRegister(utils.FunctionDurationTimeCostTotal)
-	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostCount)
-	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostTotal)
-	webhooks.WebhookManager.AddMetricsExtraHandler("/stats/", promhttp.Handler())
+	// prometheus.MustRegister(utils.FunctionDurationTimeCostCount)
+	// prometheus.MustRegister(utils.FunctionDurationTimeCostTotal)
+	// prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostCount)
+	// prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostTotal)
+	// webhooks.WebhookManager.AddMetricsExtraHandler("/stats/", promhttp.Handler())
 	setupWebhooks(webhooks.WebhookManager)
 
 	if err := webhooks.WebhookManager.AddHealthzCheck("healthz", healthz.Ping); err != nil {

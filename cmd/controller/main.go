@@ -30,7 +30,6 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v3"
 	v1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -42,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/controllers"
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
@@ -51,6 +51,7 @@ import (
 
 	//+kubebuilder:scaffold:imports
 
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -71,6 +72,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(gatewayapi.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1beta1.AddToScheme(scheme))
 }
 
@@ -126,7 +128,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
+		Metrics:                server.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "303cfed9.f5.com",
@@ -151,8 +153,9 @@ func main() {
 	prometheus.MustRegister(utils.FunctionDurationTimeCostTotal)
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostCount)
 	prometheus.MustRegister(f5_bigip.BIGIPiControlTimeCostTotal)
-	mgr.AddMetricsExtraHandler("/stats/", promhttp.Handler())
-	mgr.AddMetricsExtraHandler("/runtime/", dumpRuntimeHandler())
+	// TODO: use echo
+	// mgr.AddMetricsExtraHandler("/stats/", promhttp.Handler())
+	// mgr.AddMetricsExtraHandler("/runtime/", dumpRuntimeHandler())
 
 	setupReconcilers(mgr)
 
@@ -212,17 +215,17 @@ func setupReconcilers(mgr manager.Manager) {
 
 	resources.Register(
 		&controllers.GatewayClassReconciler{
-			ObjectType: &gatewayv1beta1.GatewayClass{},
+			ObjectType: &gatewayapi.GatewayClass{},
 			Client:     mgr.GetClient(),
 			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.GatewayReconciler{
-			ObjectType: &gatewayv1beta1.Gateway{},
+			ObjectType: &gatewayapi.Gateway{},
 			Client:     mgr.GetClient(),
 			// LogLevel:   cmdflags.LogLevel,
 		},
 		&controllers.HttpRouteReconciler{
-			ObjectType: &gatewayv1beta1.HTTPRoute{},
+			ObjectType: &gatewayapi.HTTPRoute{},
 			Client:     mgr.GetClient(),
 			// LogLevel:   cmdflags.LogLevel,
 		},

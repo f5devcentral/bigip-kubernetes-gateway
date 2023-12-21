@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func Test_parseiRulesFrom(t *testing.T) {
@@ -49,7 +49,7 @@ spec:
           weight: 1
 `
 
-	var hr gatewayv1beta1.HTTPRoute
+	var hr gatewayapi.HTTPRoute
 	if err := load2runtimeObject([]byte(hryaml), &hr); err != nil {
 		t.Logf("failed with msg: %s", err.Error())
 		t.Fail()
