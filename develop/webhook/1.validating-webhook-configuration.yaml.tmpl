@@ -1,3 +1,63 @@
+# Install cert-manager.io: https://cert-manager.io/docs/installation/
+---
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+
+---
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-selfsigned-ca
+  namespace: kube-system
+spec:
+  isCA: true
+  commonName: my-selfsigned-ca
+  secretName: root-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+
+---
+
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-ca-issuer
+  namespace: kube-system
+spec:
+  ca:
+    secretName: root-secret
+
+---
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: serving-cert
+  namespace: kube-system
+spec:
+  dnsNames:
+  - bigip-kubernetes-gateway-webhook.kube-system.svc
+  - bigip-kubernetes-gateway-webhook.kube-system.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
+    - 0.0.0.0
+    - ${local_host_ipaddr}
+  issuerRef:
+    kind: Issuer
+    name: my-ca-issuer
+  secretName: webhook-server-cert
+
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -22,6 +82,7 @@ webhooks:
           - gateway.networking.k8s.io
         apiVersions:
         - v1beta1
+        - v1
         operations: ["*"]
         resources:
           - gatewayclasses
@@ -43,6 +104,7 @@ webhooks:
           - gateway.networking.k8s.io
         apiVersions:
         - v1beta1
+        - v1
         operations: ["*"]
         resources:
           - gateways
@@ -64,6 +126,7 @@ webhooks:
           - gateway.networking.k8s.io
         apiVersions:
         - v1beta1
+        - v1
         operations: ["*"]
         resources:
           - httproutes
@@ -85,6 +148,7 @@ webhooks:
           - gateway.networking.k8s.io
         apiVersions:
         - v1beta1
+        - v1
         operations: ["*"]
         resources:
           - referencegrants
