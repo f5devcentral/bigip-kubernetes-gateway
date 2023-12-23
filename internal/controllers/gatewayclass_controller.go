@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type GatewayClassReconciler struct {
@@ -57,7 +57,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	var obj gatewayv1beta1.GatewayClass
+	var obj gatewayapi.GatewayClass
 	slog.Debugf("handling gatewayclass " + req.Name)
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if client.IgnoreNotFound(err) == nil {
@@ -72,7 +72,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	} else {
 		ngwc := obj.DeepCopy()
-		if ngwc.Spec.ControllerName != gatewayv1beta1.GatewayController(pkg.ActiveSIGs.ControllerName) {
+		if ngwc.Spec.ControllerName != gatewayapi.GatewayController(pkg.ActiveSIGs.ControllerName) {
 			slog.Debugf("ignore this gwc " + ngwc.Name + " as its controllerName does not match " + pkg.ActiveSIGs.ControllerName)
 			return ctrl.Result{}, nil
 		}
@@ -81,7 +81,7 @@ func (r *GatewayClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			{
 				Type:               "Accepted",
 				Status:             metav1.ConditionTrue,
-				Reason:             string(gatewayv1beta1.GatewayClassReasonAccepted),
+				Reason:             string(gatewayapi.GatewayClassReasonAccepted),
 				Message:            "Accepted message",
 				LastTransitionTime: metav1.NewTime(time.Now()),
 			},

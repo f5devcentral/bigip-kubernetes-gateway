@@ -23,7 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/f5devcentral/bigip-kubernetes-gateway/internal/pkg"
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
@@ -51,7 +51,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		<-time.After(100 * time.Millisecond)
 		return ctrl.Result{Requeue: true}, nil
 	}
-	var obj gatewayv1beta1.Gateway
+	var obj gatewayapi.Gateway
 
 	slog.Debugf("handling " + req.NamespacedName.String())
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {

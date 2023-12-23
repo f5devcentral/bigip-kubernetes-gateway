@@ -15,6 +15,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -23,11 +24,11 @@ func init() {
 		mutex:          sync.RWMutex{},
 		SyncedAtStart:  false,
 		ControllerName: "",
-		Gateway:        map[string]*gatewayv1beta1.Gateway{},
-		HTTPRoute:      map[string]*gatewayv1beta1.HTTPRoute{},
+		Gateway:        map[string]*gatewayapi.Gateway{},
+		HTTPRoute:      map[string]*gatewayapi.HTTPRoute{},
 		Endpoints:      map[string]*v1.Endpoints{},
 		Service:        map[string]*v1.Service{},
-		GatewayClass:   map[string]*gatewayv1beta1.GatewayClass{},
+		GatewayClass:   map[string]*gatewayapi.GatewayClass{},
 		Namespace:      map[string]*v1.Namespace{},
 		ReferenceGrant: map[string]*gatewayv1beta1.ReferenceGrant{},
 		Secret:         map[string]*v1.Secret{},
@@ -36,11 +37,11 @@ func init() {
 	LogLevel = utils.LogLevel_Type_INFO
 }
 
-func hrName(hr *gatewayv1beta1.HTTPRoute) string {
+func hrName(hr *gatewayapi.HTTPRoute) string {
 	return strings.Join([]string{"hr", hr.Namespace, hr.Name}, ".")
 }
 
-func hrParentName(hr *gatewayv1beta1.HTTPRoute, pr *gatewayv1beta1.ParentReference) string {
+func hrParentName(hr *gatewayapi.HTTPRoute, pr *gatewayapi.ParentReference) string {
 	ns := hr.Namespace
 	if pr.Namespace != nil {
 		ns = string(*pr.Namespace)
@@ -52,7 +53,7 @@ func hrParentName(hr *gatewayv1beta1.HTTPRoute, pr *gatewayv1beta1.ParentReferen
 	return strings.Join([]string{"gw", ns, string(pr.Name), sn}, ".")
 }
 
-func gwListenerName(gw *gatewayv1beta1.Gateway, ls *gatewayv1beta1.Listener) string {
+func gwListenerName(gw *gatewayapi.Gateway, ls *gatewayapi.Listener) string {
 	return strings.Join([]string{"gw", gw.Namespace, gw.Name, string(ls.Name)}, ".")
 }
 
@@ -60,7 +61,7 @@ func tlsName(scrt *v1.Secret) string {
 	return strings.Join([]string{"scrt", scrt.Namespace, scrt.Name}, ".")
 }
 
-func RouteMatches(gwNamespace string, listener *gatewayv1beta1.Listener, routeNamespace *v1.Namespace, routeType string) bool {
+func RouteMatches(gwNamespace string, listener *gatewayapi.Listener, routeNamespace *v1.Namespace, routeType string) bool {
 	// actually, "listener" may be nil, but ".AllowedRoutes.Namespaces.From" will never be nil
 	if listener == nil || listener.AllowedRoutes == nil {
 		return false
@@ -79,11 +80,11 @@ func RouteMatches(gwNamespace string, listener *gatewayv1beta1.Listener, routeNa
 
 	// From
 	switch *namespaces.From {
-	case gatewayv1beta1.NamespacesFromAll:
+	case gatewayapi.NamespacesFromAll:
 		matchedFrom = true
-	case gatewayv1beta1.NamespacesFromSame:
+	case gatewayapi.NamespacesFromSame:
 		matchedFrom = gwNamespace == routeNamespace.Name
-	case gatewayv1beta1.NamespacesFromSelector:
+	case gatewayapi.NamespacesFromSelector:
 		if selector, err := metav1.LabelSelectorAsSelector(namespaces.Selector); err != nil {
 			return false
 		} else {
@@ -98,27 +99,27 @@ func RouteMatches(gwNamespace string, listener *gatewayv1beta1.Listener, routeNa
 	allowedKinds := listener.AllowedRoutes.Kinds
 	if len(allowedKinds) == 0 {
 		switch listener.Protocol {
-		case gatewayv1beta1.HTTPProtocolType:
-			matchedKind = routeType == reflect.TypeOf(gatewayv1beta1.HTTPRoute{}).Name()
-		case gatewayv1beta1.HTTPSProtocolType:
+		case gatewayapi.HTTPProtocolType:
+			matchedKind = routeType == reflect.TypeOf(gatewayapi.HTTPRoute{}).Name()
+		case gatewayapi.HTTPSProtocolType:
 			types := []string{
-				reflect.TypeOf(gatewayv1beta1.HTTPRoute{}).Name(),
+				reflect.TypeOf(gatewayapi.HTTPRoute{}).Name(),
 				// add other route types here.
 			}
 			matchedKind = utils.Contains(types, routeType)
-		case gatewayv1beta1.TLSProtocolType:
+		case gatewayapi.TLSProtocolType:
 			return false
-		case gatewayv1beta1.TCPProtocolType:
+		case gatewayapi.TCPProtocolType:
 			return false
-		case gatewayv1beta1.UDPProtocolType:
+		case gatewayapi.UDPProtocolType:
 			return false
 		}
 	} else {
 		for _, k := range allowedKinds {
-			if k.Group != nil && *k.Group != gatewayv1beta1.GroupName {
+			if k.Group != nil && *k.Group != gatewayapi.GroupName {
 				return false
 			} else {
-				if k.Kind == gatewayv1beta1.Kind(routeType) {
+				if k.Kind == gatewayapi.Kind(routeType) {
 					matchedKind = true
 					break
 				}
@@ -153,10 +154,10 @@ func stringifyRGTo(rgt *gatewayv1beta1.ReferenceGrantTo, ns string) string {
 	return utils.Keyname(g, string(rgt.Kind), ns, n)
 }
 
-func unifiedGateways(objs []*gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
+func unifiedGateways(objs []*gatewayapi.Gateway) []*gatewayapi.Gateway {
 
 	m := map[string]bool{}
-	rlt := []*gatewayv1beta1.Gateway{}
+	rlt := []*gatewayapi.Gateway{}
 
 	for _, obj := range objs {
 		name := utils.Keyname(obj.Namespace, obj.Name)
@@ -168,7 +169,7 @@ func unifiedGateways(objs []*gatewayv1beta1.Gateway) []*gatewayv1beta1.Gateway {
 	return rlt
 }
 
-func classNamesOfGateways(gws []*gatewayv1beta1.Gateway) []string {
+func classNamesOfGateways(gws []*gatewayapi.Gateway) []string {
 	rlt := []string{}
 
 	for _, gw := range gws {
@@ -260,7 +261,7 @@ func (rgft *ReferenceGrantFromTo) exists(from, to string) bool {
 }
 
 // TODO: combine this function with that in webhooks package
-func validateSecretType(group *gatewayv1beta1.Group, kind *gatewayv1beta1.Kind) error {
+func validateSecretType(group *gatewayapi.Group, kind *gatewayapi.Kind) error {
 	g, k := v1.GroupName, reflect.TypeOf(v1.Secret{}).Name()
 	if group != nil {
 		g = string(*group)

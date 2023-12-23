@@ -6,16 +6,17 @@ import (
 	"github.com/f5devcentral/f5-bigip-rest-go/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type HTTPRouteWebhook struct {
 	Logger *utils.SLOG
 }
 
-func (wh *HTTPRouteWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) error {
+func (wh *HTTPRouteWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	var err1, err2 error = nil, nil
-	hr := obj.(*gatewayv1beta1.HTTPRoute)
+	hr := obj.(*gatewayapi.HTTPRoute)
 
 	if validateMap[VK_httproute_parentRefs] {
 		err1 = validateHTTPRouteParentRefs(hr)
@@ -23,12 +24,12 @@ func (wh *HTTPRouteWebhook) ValidateCreate(ctx context.Context, obj runtime.Obje
 	if validateMap[VK_httproute_rules_backendRefs] {
 		err2 = validateHTTPRouteBackendRefs(hr)
 	}
-	return utils.MergeErrors([]error{err1, err2})
+	return nil, utils.MergeErrors([]error{err1, err2})
 }
 
-func (wh *HTTPRouteWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) error {
+func (wh *HTTPRouteWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	var err1, err2 error = nil, nil
-	hr := newObj.(*gatewayv1beta1.HTTPRoute)
+	hr := newObj.(*gatewayapi.HTTPRoute)
 
 	if validateMap[VK_httproute_parentRefs] {
 		err1 = validateHTTPRouteParentRefs(hr)
@@ -36,16 +37,16 @@ func (wh *HTTPRouteWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj r
 	if validateMap[VK_httproute_rules_backendRefs] {
 		err2 = validateHTTPRouteBackendRefs(hr)
 	}
-	return utils.MergeErrors([]error{err1, err2})
+	return nil, utils.MergeErrors([]error{err1, err2})
 }
 
-func (wh *HTTPRouteWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) error {
-	return nil
+func (wh *HTTPRouteWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	return nil, nil
 }
 
 func (wh *HTTPRouteWebhook) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(&gatewayv1beta1.HTTPRoute{}).
+		For(&gatewayapi.HTTPRoute{}).
 		WithValidator(wh).
 		Complete()
 }

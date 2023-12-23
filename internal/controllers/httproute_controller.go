@@ -25,7 +25,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type HttpRouteReconciler struct {
@@ -51,7 +51,7 @@ func (r *HttpRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	var obj gatewayv1beta1.HTTPRoute
+	var obj gatewayapi.HTTPRoute
 
 	slog.Debugf("handling " + req.NamespacedName.String())
 	if err := r.Client.Get(ctx, req.NamespacedName, &obj); err != nil {
